@@ -1,0 +1,384 @@
+2026-10-26 18:49:54,989 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 18:49:54,990 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 18:49:54,991 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 18:51:37,044 ERROR mypines: Excepción no controlada
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\main.py", line 171, in register
+    def register(self):
+    
+KeyboardInterrupt
+2026-10-26 18:51:45,490 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 18:51:45,491 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 18:51:45,491 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 18:57:02,598 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 18:57:02,599 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 18:57:02,599 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:37:45,157 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:37:45,158 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:37:45,158 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:40:27,015 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:40:27,016 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:40:27,016 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:41:37,812 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:41:37,812 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:41:37,813 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:43:27,012 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:43:27,012 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:43:27,013 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:44:58,766 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:44:58,767 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:44:58,767 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:45:25,558 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:45:25,559 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:45:25,559 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:47:02,424 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:47:02,425 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:47:02,425 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-26 19:47:19,782 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-26 19:47:19,782 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-26 19:47:19,783 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 17:49:43,847 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 17:49:43,848 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 17:49:43,848 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 18:20:19,839 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 18:20:19,840 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 18:20:19,840 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 18:20:52,208 ERROR mypines: No se pudo abrir la página: 'NoneType' object has no attribute 'deleteLater'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 108, in go
+    page = factory(**kw)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 79, in <lambda>
+    "calendar": lambda: pc.InterviewsPage(s),
+                        ~~~~~~~~~~~~~~~~~^^^
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_client.py", line 886, in __init__
+    self.calendar.set_marks(self.marks())
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "c:\Users\HP\Desktop\My Business 2\app\calendar_widgets.py", line 59, in set_marks
+    self.rebuild()
+    ~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\calendar_widgets.py", line 75, in rebuild
+    item.widget().deleteLater()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'deleteLater'
+2026-10-27 18:21:15,242 ERROR mypines: No se pudo abrir la página: 'NoneType' object has no attribute 'deleteLater'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 108, in go
+    page = factory(**kw)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 79, in <lambda>
+    "calendar": lambda: pc.InterviewsPage(s),
+                        ~~~~~~~~~~~~~~~~~^^^
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_client.py", line 886, in __init__
+    self.calendar.set_marks(self.marks())
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "c:\Users\HP\Desktop\My Business 2\app\calendar_widgets.py", line 59, in set_marks
+    self.rebuild()
+    ~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\calendar_widgets.py", line 75, in rebuild
+    item.widget().deleteLater()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'deleteLater'
+2026-10-27 18:25:05,499 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 18:25:05,500 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 18:25:05,500 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 19:45:45,697 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 19:45:45,698 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 19:45:45,699 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 19:46:55,813 ERROR mypines: No se pudo abrir la ventana principal
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\main.py", line 247, in start_session
+    window = MainWindow(user, on_logout=show_login)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 50, in __init__
+    self.factories = self.make_factories()
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 90, in make_factories
+    elif user["rol"] == "contratante":
+         ^^^^
+NameError: name 'user' is not defined. Did you mean: 'self.user'?
+2026-10-27 19:46:55,819 ERROR mypines: Error mostrado al usuario: No se pudo abrir Foxy Lancer
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\main.py", line 247, in start_session
+    window = MainWindow(user, on_logout=show_login)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 50, in __init__
+    self.factories = self.make_factories()
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 90, in make_factories
+    elif user["rol"] == "contratante":
+         ^^^^
+NameError: name 'user' is not defined. Did you mean: 'self.user'?
+2026-10-27 19:47:02,381 ERROR mypines: No se pudo abrir la ventana principal
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\main.py", line 247, in start_session
+    window = MainWindow(user, on_logout=show_login)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 50, in __init__
+    self.factories = self.make_factories()
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 90, in make_factories
+    elif user["rol"] == "contratante":
+         ^^^^
+NameError: name 'user' is not defined. Did you mean: 'self.user'?
+2026-10-27 19:47:02,382 ERROR mypines: Error mostrado al usuario: No se pudo abrir Foxy Lancer
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\main.py", line 247, in start_session
+    window = MainWindow(user, on_logout=show_login)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 50, in __init__
+    self.factories = self.make_factories()
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 90, in make_factories
+    elif user["rol"] == "contratante":
+         ^^^^
+NameError: name 'user' is not defined. Did you mean: 'self.user'?
+2026-10-27 19:47:05,737 ERROR mypines: No se pudo abrir la ventana principal
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\main.py", line 247, in start_session
+    window = MainWindow(user, on_logout=show_login)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 50, in __init__
+    self.factories = self.make_factories()
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 90, in make_factories
+    elif user["rol"] == "contratante":
+         ^^^^
+NameError: name 'user' is not defined. Did you mean: 'self.user'?
+2026-10-27 19:47:05,739 ERROR mypines: Error mostrado al usuario: No se pudo abrir Foxy Lancer
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\main.py", line 247, in start_session
+    window = MainWindow(user, on_logout=show_login)
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 50, in __init__
+    self.factories = self.make_factories()
+                     ~~~~~~~~~~~~~~~~~~~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 90, in make_factories
+    elif user["rol"] == "contratante":
+         ^^^^
+NameError: name 'user' is not defined. Did you mean: 'self.user'?
+2026-10-27 19:53:37,507 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 19:53:37,508 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 19:53:37,508 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 19:55:20,774 ERROR mypines: Excepción no controlada
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\widgets.py", line 43, in <lambda>
+    b.clicked.connect(lambda checked=False, s=slot: s())
+                                                    ~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_client.py", line 1182, in configurar_rol
+    if d.exec() == QDialog.DialogCode.Accepted:
+                   ^^^^^^^
+NameError: name 'QDialog' is not defined
+2026-10-27 19:55:30,150 ERROR mypines: Excepción no controlada
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\widgets.py", line 43, in <lambda>
+    b.clicked.connect(lambda checked=False, s=slot: s())
+                                                    ~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_client.py", line 1182, in configurar_rol
+    if d.exec() == QDialog.DialogCode.Accepted:
+                   ^^^^^^^
+NameError: name 'QDialog' is not defined
+2026-10-27 19:55:35,663 ERROR mypines: Excepción no controlada
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\widgets.py", line 43, in <lambda>
+    b.clicked.connect(lambda checked=False, s=slot: s())
+                                                    ~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_client.py", line 1182, in configurar_rol
+    if d.exec() == QDialog.DialogCode.Accepted:
+                   ^^^^^^^
+NameError: name 'QDialog' is not defined
+2026-10-27 20:02:08,839 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 20:02:08,840 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 20:02:08,840 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 20:37:28,051 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 20:37:28,052 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 20:37:28,052 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 20:47:10,241 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 20:47:10,242 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 20:47:10,242 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 20:47:34,895 ERROR mypines: No se pudieron cargar tus trabajos: fetchall() got an unexpected keyword argument 'fetch'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_client.py", line 1306, in render
+    trabajos = services.listar_trabajos_por_contratante(self.user["id"])
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 1293, in listar_trabajos_por_contratante
+    return fetchall("""SELECT t.*, (SELECT COUNT(*) FROM solicitudes s WHERE s.trabajo_id=t.id) AS total_solicitudes,
+                              (SELECT COUNT(*) FROM contrataciones c WHERE c.trabajo_id=t.id) AS contrataciones
+                       FROM trabajos t
+                       WHERE t.cliente_id=%s ORDER BY t.creado_en DESC""", (contratante_id,), fetch=True)
+TypeError: fetchall() got an unexpected keyword argument 'fetch'
+2026-10-27 20:48:00,167 ERROR mypines: No se pudieron cargar tus trabajos: fetchall() got an unexpected keyword argument 'fetch'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_client.py", line 1306, in render
+    trabajos = services.listar_trabajos_por_contratante(self.user["id"])
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 1293, in listar_trabajos_por_contratante
+    return fetchall("""SELECT t.*, (SELECT COUNT(*) FROM solicitudes s WHERE s.trabajo_id=t.id) AS total_solicitudes,
+                              (SELECT COUNT(*) FROM contrataciones c WHERE c.trabajo_id=t.id) AS contrataciones
+                       FROM trabajos t
+                       WHERE t.cliente_id=%s ORDER BY t.creado_en DESC""", (contratante_id,), fetch=True)
+TypeError: fetchall() got an unexpected keyword argument 'fetch'
+2026-10-27 20:55:03,916 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 20:55:03,925 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 20:55:03,925 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 20:58:46,232 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 20:58:46,233 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 20:58:46,233 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-27 21:00:54,513 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-27 21:00:54,514 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-27 21:00:54,514 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-29 11:30:48,027 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-29 11:30:48,028 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-29 11:30:48,028 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-29 11:39:09,249 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-29 11:39:09,250 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-29 11:39:09,250 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-10-29 20:38:21,314 INFO mysql.connector: package: mysql.connector.plugins
+2026-10-29 20:38:21,315 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-10-29 20:38:21,315 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 16:18:47,149 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 16:18:47,150 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 16:18:47,150 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 16:28:06,578 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 16:28:06,579 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 16:28:06,579 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 16:42:42,060 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 16:42:42,061 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 16:42:42,061 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 16:43:38,008 ERROR mypines: Excepción no controlada
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\widgets.py", line 43, in <lambda>
+    b.clicked.connect(lambda checked=False, s=slot: s())
+                                                    ~^^
+  File "c:\Users\HP\Desktop\My Business 2\app\dialogs.py", line 1329, in <lambda>
+    btn_contratar = btn("Contratar", None, lambda sid=s["id"], fid=s["freelancer_id"]: self.contratar(sid, fid))
+                                                                                       ~~~~~~~~~~~~~~^^^^^^^^^^
+  File "c:\Users\HP\Desktop\My Business 2\app\dialogs.py", line 1345, in contratar
+    guard = ui_guard.BusyGuard(self, [self.ok_btn])
+                                      ^^^^^^^^^^^
+AttributeError: 'ContratarDialog' object has no attribute 'ok_btn'
+2026-11-01 16:46:30,581 ERROR mypines: Excepción no controlada
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\shell.py", line 62, in <lambda>
+    self.timer.timeout.connect(lambda: self.refresh_bell(True))
+    
+KeyboardInterrupt
+2026-11-01 16:46:55,892 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 16:46:55,893 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 16:46:55,893 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 16:47:32,246 ERROR mypines: No se pudo contratar: Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\async_db.py", line 39, in run
+    self._result = self._fn(*self._args, **self._kwargs)
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 1232, in contratar_freelancer
+    raise ValueError("Este trabajo ya no está disponible para contratación.")
+ValueError: Este trabajo ya no está disponible para contratación.
+NoneType: None
+2026-11-01 16:47:44,175 ERROR mypines: No se pudo contratar: Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\async_db.py", line 39, in run
+    self._result = self._fn(*self._args, **self._kwargs)
+                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 1232, in contratar_freelancer
+    raise ValueError("Este trabajo ya no está disponible para contratación.")
+ValueError: Este trabajo ya no está disponible para contratación.
+NoneType: None
+2026-11-01 16:48:48,412 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 16:48:48,412 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 16:48:48,412 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 17:26:47,648 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 17:26:47,649 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 17:26:47,649 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 17:49:24,023 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 17:49:24,024 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 17:49:24,024 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 17:51:14,488 INFO mysql.connector: package: mysql.connector.plugins
+2026-11-01 17:51:14,488 INFO mysql.connector: plugin_name: caching_sha2_password
+2026-11-01 17:51:14,489 INFO mysql.connector: AUTHENTICATION_PLUGIN_CLASS: MySQLCachingSHA2PasswordAuthPlugin
+2026-11-01 17:51:46,329 ERROR mypines: No se pudieron cargar los pagos en disputa: 1054 (42S22): Unknown column 'c.cliente_id' in 'field list'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_admin.py", line 833, in render
+    pagos = services.listar_pagos_disputados()
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 1502, in listar_pagos_disputados
+    rows = fetchall("""SELECT p.id, p.contrato_id, p.monto, p.estado, p.motivo_disputa, p.fecha_reporte,
+                              p.compensacion_aprobada, p.monto_compensacion,
+    ...<7 lines>...
+                       WHERE p.estado='Disputado'
+                       ORDER BY p.fecha_reporte DESC""")
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 31, in fetchall
+    cur.execute(sql, params)
+    ~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._stmt_partition["mappable_stmt"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        read_timeout=self._read_timeout,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        write_timeout=self._write_timeout,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+        self._send_cmd(
+    ...<6 lines>...
+        write_timeout,
+    )
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'c.cliente_id' in 'field list'
+2026-11-01 17:51:50,629 ERROR mypines: No se pudieron cargar las compensaciones: module 'app.services' has no attribute 'listar_compensaciones_pendientes'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_admin.py", line 963, in render
+    comps = services.listar_compensaciones_pendientes()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'app.services' has no attribute 'listar_compensaciones_pendientes'
+2026-11-01 17:51:56,099 ERROR mypines: No se pudieron cargar los pagos en disputa: 1054 (42S22): Unknown column 'c.cliente_id' in 'field list'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_admin.py", line 833, in render
+    pagos = services.listar_pagos_disputados()
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 1502, in listar_pagos_disputados
+    rows = fetchall("""SELECT p.id, p.contrato_id, p.monto, p.estado, p.motivo_disputa, p.fecha_reporte,
+                              p.compensacion_aprobada, p.monto_compensacion,
+    ...<7 lines>...
+                       WHERE p.estado='Disputado'
+                       ORDER BY p.fecha_reporte DESC""")
+  File "c:\Users\HP\Desktop\My Business 2\app\services.py", line 31, in fetchall
+    cur.execute(sql, params)
+    ~~~~~~~~~~~^^^^^^^^^^^^^
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\cursor.py", line 416, in execute
+    self._connection.cmd_query(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self._stmt_partition["mappable_stmt"],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        read_timeout=self._read_timeout,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        write_timeout=self._write_timeout,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\opentelemetry\context_propagation.py", line 97, in wrapper
+    return method(cnx, *args, **kwargs)
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\connection.py", line 984, in cmd_query
+    result = self._handle_result(
+        self._send_cmd(
+    ...<6 lines>...
+        write_timeout,
+    )
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 89, in handle_cnx_method
+    raise err
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\_decorating.py", line 85, in handle_cnx_method
+    return cnx_method(cnx, *args, **kwargs)
+  File "C:\Users\HP\AppData\Roaming\Python\Python314\site-packages\mysql\connector\connection.py", line 745, in _handle_result
+    raise get_exception(packet)
+mysql.connector.errors.ProgrammingError: 1054 (42S22): Unknown column 'c.cliente_id' in 'field list'
+2026-11-01 17:52:05,462 ERROR mypines: No se pudieron cargar las compensaciones: module 'app.services' has no attribute 'listar_compensaciones_pendientes'
+Traceback (most recent call last):
+  File "c:\Users\HP\Desktop\My Business 2\app\pages_admin.py", line 963, in render
+    comps = services.listar_compensaciones_pendientes()
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: module 'app.services' has no attribute 'listar_compensaciones_pendientes'

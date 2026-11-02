@@ -70,9 +70,10 @@ class MonthCalendar(QWidget):
         t = th.T
         while self.grid.count():
             item = self.grid.takeAt(0)
-            if item.widget():
-                item.widget().setParent(None)
-                item.widget().deleteLater()
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
         self.title.setText(f"{logic.MESES[self.month - 1].upper()} {self.year}")
         for c, name in enumerate(WEEKDAYS):
             lab = QLabel(name)

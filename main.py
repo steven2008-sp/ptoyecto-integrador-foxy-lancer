@@ -81,16 +81,22 @@ QMessageBox QPushButton { min-width:88px; }
 CATEGORIES = ["Frontend", "Backend", "Full Stack", "Aplicaciones móviles", "Bases de datos", "DevOps", "Diseño", "Marketing digital", "Contenido y redacción", "Soporte técnico", "Análisis de datos", "QA y pruebas", "Ciberseguridad", "Automatización", "Otro"]
 
 def message_error(parent, title, exc):
+    import logging
+    logging.getLogger("mypines").exception("Error mostrado al usuario: %s", title)
     detail = str(exc)
     if getattr(exc, "errno", None) == 1146 or "doesn't exist" in detail.lower():
-        hint = "\n\nFalta una tabla de Foxy Lancer. La aplicación intentará crear las tablas auxiliares al iniciar; vuelve a abrirla. Si continúa, ejecuta database/schema.sql en Workbench."
+        user_msg = "Falta una tabla de Foxy Lancer. La aplicación intentará crear las tablas auxiliares al iniciar; vuelve a abrirla. Si continúa, ejecuta database/schema.sql en Workbench."
     elif getattr(exc, "errno", None) == 1045 or "access denied" in detail.lower():
-        hint = "\n\nMySQL rechazó el usuario o la contraseña. Revisa MYSQL_USER y MYSQL_PASSWORD en el archivo .env de la carpeta Foxy Lancer."
+        user_msg = "MySQL rechazó el usuario o la contraseña. Revisá MYSQL_USER y MYSQL_PASSWORD en el archivo .env."
     elif getattr(exc, "errno", None) == 2003 or "can't connect" in detail.lower():
-        hint = "\n\nNo se pudo alcanzar el servidor MySQL. Comprueba que el servicio MySQL80 esté en ejecución."
+        user_msg = "No se pudo alcanzar el servidor MySQL. Comprobá que el servicio MySQL80 esté en ejecución."
+    elif isinstance(exc, PermissionError):
+        user_msg = "No tenés permiso para realizar esta acción."
+    elif isinstance(exc, ValueError):
+        user_msg = detail
     else:
-        hint = "\n\nRevisa el detalle del error. No se han borrado tus datos."
-    QMessageBox.critical(parent, title, detail + hint)
+        user_msg = "Ocurrió un error inesperado. No se borraron tus datos. Revisá mypines.log para más detalles."
+    QMessageBox.critical(parent, title, user_msg)
 
 class AuthWindow(QWidget):
     def __init__(self, on_login):
@@ -179,7 +185,7 @@ class AuthWindow(QWidget):
         try:
             connection=get_connection()
             try:
-                cursor=connection.cursor(); cursor.execute("INSERT INTO usuarios (nombre,correo,password_hash,rol) VALUES (%s,%s,%s,'cliente')",(name,email,hash_password(password))); connection.commit()
+                cursor=connection.cursor(); cursor.execute("INSERT INTO usuarios (nombre,correo,password_hash,rol) VALUES (%s,%s,%s,'freelancer')",(name,email,hash_password(password))); connection.commit()
             finally: connection.close()
             QMessageBox.information(self,"Cuenta creada","Tu cuenta se creó correctamente. Ya puedes iniciar sesión.")
             self.tabs.setCurrentIndex(0); self.login_email.setText(email); self.login_password.clear()

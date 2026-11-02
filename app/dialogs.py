@@ -7,12 +7,15 @@ from PySide6.QtCore import Qt, QTimer, QDate
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QLineEdit, QTextEdit, QComboBox, QDoubleSpinBox,
-    QCheckBox, QDateEdit, QScrollArea, QWidget, QFileDialog, QMessageBox, QStackedWidget, QFrame,
+    QCheckBox, QRadioButton, QButtonGroup, QDateEdit, QScrollArea, QWidget, QFileDialog, QMessageBox, QStackedWidget, QFrame,
 )
 
 from . import services, logic, ai, exports
 from . import theme as th
 from .errors import handle
+from . import validation
+from . import async_service
+from . import ui_guard
 from .widgets import (
     Card, lbl, btn, badge, state_badge, chip, chips_row, badges_row, stars_label, Avatar, progress, clear_layout,
     hsep, toast,
@@ -91,11 +94,22 @@ class JobDialog(BaseDialog):
         self.status = QComboBox()
         self.status.addItems(["Publicado", "Borrador", "Cerrado"])
         self.urgent = QCheckBox("Marcar como urgente")
+        self.fecha_limite = QDateEdit()
+        self.fecha_limite.setCalendarPopup(True)
+        self.fecha_limite.setDisplayFormat("dd/MM/yyyy")
+        self.fecha_limite.setMinimumDate(QDate.currentDate())
+        self.fecha_limite.setDate(QDate.currentDate())
         if job:
             self.category.setCurrentText(job["categoria"])
             self.mode.setCurrentText(job["modalidad"])
             self.status.setCurrentText(job["estado"])
             self.urgent.setChecked(bool(job.get("urgente")))
+            fl = job.get("fecha_limite")
+            if fl:
+                from datetime import date as _date
+                if isinstance(fl, str):
+                    fl = _date.fromisoformat(fl)
+                self.fecha_limite.setDate(fl)
         form.addRow("Título:", self.title)
         form.addRow("Categoría:", self.category)
         form.addRow("Descripción:", self.description)
@@ -108,7 +122,8 @@ class JobDialog(BaseDialog):
         form.addRow("Ubicación:", self.location)
         form.addRow("Presupuesto:", self.budget)
         form.addRow("Estado:", self.status)
-        form.addRow("", self.urgent)
+        form.addRow("Urgente:", self.urgent)
+        form.addRow("Fecha límite (opcional si no es urgente):", self.fecha_limite)
         root.addLayout(form)
         self.buttons("Guardar", self.validate_and_accept)
 
@@ -118,6 +133,7 @@ class JobDialog(BaseDialog):
             "descripcion": self.description.toPlainText().strip(), "habilidades": self.skills.text().strip(),
             "modalidad": self.mode.currentText(), "presupuesto": self.budget.value(), "estado": self.status.currentText(),
             "urgente": self.urgent.isChecked(), "ubicacion": self.location.text().strip(),
+            "fecha_limite": self.fecha_limite.date().toPython(),
         }
 
     def improve(self):
@@ -136,16 +152,41 @@ class JobDialog(BaseDialog):
 
     def validate_and_accept(self):
         v = self.values()
-        if not v["titulo"] or not v["descripcion"]:
-            QMessageBox.warning(self, "Campos requeridos", "El título y la descripción son obligatorios.")
+        try:
+            v["titulo"] = validation.validar_titulo(v["titulo"])
+            v["descripcion"] = validation.validar_descripcion(v["descripcion"])
+            v["habilidades"] = validation.validar_habilidades(v["habilidades"])
+            v["ubicacion"] = validation.validar_ubicacion(v["ubicacion"])
+            v["presupuesto"] = validation.validar_presupuesto(v["presupuesto"])
+            v["categoria"] = validation.validar_categoria(v["categoria"])
+            v["modalidad"] = validation.validar_modalidad(v["modalidad"])
+            v["estado"] = validation.validar_estado_trabajo(v["estado"])
+            v["fecha_limite"] = validation.validar_fecha_limite(
+                v["fecha_limite"], urgente=v["urgente"], campo="Fecha límite"
+            )
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
             return
-        if len(v["titulo"]) < 5:
-            QMessageBox.warning(self, "Título muy corto", "Escribí un título de al menos 5 caracteres.")
-            return
-        if v["presupuesto"] <= 0:
-            QMessageBox.warning(self, "Presupuesto no válido", "El presupuesto debe ser mayor que 0.")
-            return
-        self.accept()
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Guardando trabajo…")
+
+        def _on_result(job_id):
+            guard.end()
+            QMessageBox.information(self, "Guardado", "El trabajo se publicó correctamente.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo guardar el trabajo", Exception(err))
+
+        async_service.async_save_job(
+            self.parent().user if hasattr(self.parent(), "user") else None,
+            v,
+            self.job["id"] if self.job else None,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
 
 
 class ApplyDialog(BaseDialog):
@@ -181,18 +222,33 @@ class ApplyDialog(BaseDialog):
 
     def submit(self):
         text = self.msg.toPlainText().strip()
-        if len(text) < 10:
-            QMessageBox.warning(self, "Mensaje requerido", "Escribí un mensaje de al menos 10 caracteres para presentarte.")
-            return
         try:
-            services.apply_to_job(self.job["id"], self.user, text)
-        except Exception as exc:
+            text = validation.validar_mensaje(text, "Mensaje de solicitud", min_len=10, max_len=2000)
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
+            return
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Enviando solicitud…")
+
+        def _on_result(rid):
+            guard.end()
+            QMessageBox.information(self, "Enviado", "Tu solicitud se envió correctamente.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            exc = Exception(err)
             if services.is_duplicate(exc):
                 QMessageBox.warning(self, "Ya solicitaste este trabajo", "Solo podés enviar una solicitud por trabajo.")
             else:
                 handle(self, "No se pudo enviar la solicitud", exc)
-            return
-        self.accept()
+
+        async_service.async_apply_to_job(
+            self.job["id"], self.user, text,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
 
 
 # ------------------------------------------------------------------- reseñas
@@ -224,17 +280,31 @@ class ReviewDialog(BaseDialog):
 
     def submit(self):
         text = self.comment.toPlainText().strip()
-        if len(text) < 5:
-            QMessageBox.warning(self, "Reseña requerida", "Escribí un comentario antes de publicar.")
-            return
-        score = 5 - self.rating.currentIndex()
-        crit = {k: 5 - c.currentIndex() for k, c in self.criteria.items()}
         try:
-            services.save_review(self.user["id"], self.target_id, score, text, **crit)
-        except Exception as exc:
-            handle(self, "No se pudo guardar la reseña", exc)
+            text = validation.validar_comentario_resena(text)
+            score = validation.validar_puntuacion(5 - self.rating.currentIndex())
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
             return
-        self.accept()
+        crit = {k: validation.validar_puntuacion(5 - c.currentIndex()) for k, c in self.criteria.items()}
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Guardando reseña…")
+
+        def _on_result(_):
+            guard.end()
+            QMessageBox.information(self, "Guardado", "Tu reseña se publicó correctamente.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo guardar la reseña", Exception(err))
+
+        async_service.async_save_review(
+            self.user["id"], self.target_id, score, text, **crit,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
 
 
 class ProfileViewDialog(BaseDialog):
@@ -339,12 +409,29 @@ class ReportDialog(BaseDialog):
 
     def submit(self):
         try:
-            services.create_report(self.user["id"], self.tipo, self.target_id, self.reason.currentText(), self.comment.toPlainText().strip())
-        except Exception as exc:
-            handle(self, "No se pudo enviar el reporte", exc)
+            motivo = validation.validar_texto_obligatorio(self.reason.currentText(), "Motivo", min_len=3, max_len=120)
+            comentario = validation.validar_texto_obligatorio(self.comment.toPlainText().strip(), "Comentario", min_len=0, max_len=500)
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
             return
-        QMessageBox.information(self, "Reporte enviado", "Gracias. El equipo de administración lo revisará.")
-        self.accept()
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Enviando reporte…")
+
+        def _on_result(_):
+            guard.end()
+            QMessageBox.information(self, "Reporte enviado", "Gracias. El equipo de administración lo revisará.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo enviar el reporte", Exception(err))
+
+        async_service.async_create_report(
+            self.user["id"], self.tipo, self.target_id, motivo, comentario,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
 
 
 # ------------------------------------------------------------------ mensajes
@@ -534,13 +621,29 @@ class InterviewDialog(BaseDialog):
         h, m = [int(x) for x in slot.split(":")]
         when = datetime.combine(d, datetime.min.time()).replace(hour=h, minute=m)
         try:
-            services.create_interview(self._job_id(), self.candidate_id, when, self.notes.toPlainText().strip(),
-                                      self.user, self.solicitud_id)
-        except Exception as exc:
-            handle(self, "No se pudo agendar", exc)
-            self.refresh_slots()
+            notas = validation.validar_notas(self.notes.toPlainText().strip())
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
             return
-        self.accept()
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Agendando entrevista…")
+
+        def _on_result(cid):
+            guard.end()
+            QMessageBox.information(self, "Agendado", "La entrevista se propuso correctamente.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo agendar", Exception(err))
+            self.refresh_slots()
+
+        async_service.async_create_interview(
+            self._job_id(), self.candidate_id, when, notas, self.user, self.solicitud_id,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
 
 
 # -------------------------------------------------------------- otros diálogos
@@ -561,12 +664,28 @@ class ChangePasswordDialog(BaseDialog):
             QMessageBox.warning(self, "No coinciden", "Las contraseñas nuevas no coinciden.")
             return
         try:
-            services.change_password(self.user["id"], self.current.text(), self.new.text())
-        except Exception as exc:
-            handle(self, "No se pudo cambiar la contraseña", exc)
+            nueva = validation.validar_password_fuerte(self.new.text(), "Nueva contraseña")
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
             return
-        QMessageBox.information(self, "Contraseña actualizada", "Tu contraseña se cambió correctamente.")
-        self.accept()
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Cambiando contraseña…")
+
+        def _on_result(_):
+            guard.end()
+            QMessageBox.information(self, "Contraseña actualizada", "Tu contraseña se cambió correctamente.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo cambiar la contraseña", Exception(err))
+
+        async_service.async_change_password(
+            self.user["id"], self.current.text(), nueva,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
 
 
 class NotificationsDialog(BaseDialog):
@@ -806,16 +925,31 @@ class ContractDialog(BaseDialog):
         self.render_pending()
 
     def create(self):
-        if self.amount.value() <= 0:
-            QMessageBox.warning(self, "Monto no válido", "El monto acordado debe ser mayor que 0.")
-            return
         try:
-            self.contract_id = services.create_contract(self.request["id"], self.user, self.amount.value(),
-                                                        self.due.date().toPython(), self.pending_hitos)
-        except Exception as exc:
-            handle(self, "No se pudo crear el contrato", exc)
+            monto = validation.validar_monto_acordado(self.amount.value())
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
             return
-        self.accept()
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Creando contrato…")
+
+        def _on_result(cid):
+            guard.end()
+            self.contract_id = cid
+            QMessageBox.information(self, "Creado", "El contrato se creó correctamente.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo crear el contrato", Exception(err))
+
+        async_service.async_create_contract(
+            self.request["id"], self.user, monto,
+            self.due.date().toPython(), self.pending_hitos,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
 
     # -- ver
     def build_view(self):
@@ -871,6 +1005,25 @@ class ContractDialog(BaseDialog):
                 row.addWidget(btn("Iniciar trabajo", "secondary", self.start))
             row.addWidget(btn("Cancelar contrato", "danger", self.cancel))
             row.addWidget(btn("Marcar completado", None, self.complete))
+        # Botón de ver perfil del otro participante
+        if self.user["id"] == c["owner_id"]:
+            row.addWidget(btn(f"Ver perfil de {c['candidato']}", "ghost", lambda: self.ver_perfil(c["freelancer_id"])))
+        else:
+            row.addWidget(btn(f"Ver perfil de {c['publicador']}", "ghost", lambda: self.ver_perfil(c["owner_id"])))
+        # Botón de confirmación de pago para ambas partes
+        try:
+            estado_pago = services.obtener_estado_pago(c["id"])
+            if estado_pago["estado"] != "Sin registro":
+                btn_pago = btn(f"Confirmar pago ({estado_pago['estado']})", None, self.confirmar_pago_contrato)
+                btn_pago.setObjectName("secondary")
+                row.addWidget(btn_pago)
+            # Botón para reportar pago no recibido (cuando hay disputa o pago enviado pero no recibido)
+            if estado_pago["estado"] in ("Enviado", "Disputado") and not estado_pago.get("contratante", False):
+                btn_reportar = btn("🚨 Reportar pago no recibido", None, self.reportar_pago_no_recibido)
+                btn_reportar.setObjectName("danger")
+                row.addWidget(btn_reportar)
+        except Exception:
+            pass
         row.addWidget(btn("Cerrar", "secondary", self.accept))
         self.body.addLayout(row)
 
@@ -913,3 +1066,652 @@ class ContractDialog(BaseDialog):
             toast(self, "Comprobante guardado")
         except Exception as exc:
             handle(self, "No se pudo crear el PDF", exc)
+
+    def confirmar_pago_contrato(self):
+        """Abre el diálogo para confirmar el pago del contrato."""
+        try:
+            estado_pago = services.obtener_estado_pago(self.contract_id)
+        except Exception as exc:
+            handle(self, "No se pudo obtener el estado del pago", exc)
+            return
+
+        d = ConfirmarPagoDialog(self, self.contract_id, self.c["monto_acordado"],
+                                self.user["rol"], estado_pago)
+        if d.exec() == QDialog.DialogCode.Accepted:
+            self.build_view()  # Recargar vista para mostrar nuevo estado
+
+    def reportar_pago_no_recibido(self):
+        """Abre el diálogo para reportar que no se recibió el pago."""
+        try:
+            estado_pago = services.obtener_estado_pago(self.contract_id)
+        except Exception as exc:
+            handle(self, "No se pudo obtener el estado del pago", exc)
+            return
+
+        d = ReportarPagoNoRecibidoDialog(self, self.contract_id, self.c["monto_acordado"],
+                                         self.user["rol"])
+        if d.exec() == QDialog.DialogCode.Accepted:
+            self.build_view()  # Recargar vista para mostrar nuevo estado
+
+    def ver_perfil(self, usuario_id):
+        """Abre el perfil de un usuario (freelancer o contratante)."""
+        from .dialogs import PerfilFreelancerDialog
+        d = PerfilFreelancerDialog(self, self.user, usuario_id)
+        d.exec()
+
+
+# ======================================================================
+# Diálogo para reportar pago no recibido (Foxy Lancer 3.1)
+# ======================================================================
+class ReportarPagoNoRecibidoDialog(BaseDialog):
+    """Permite al contratante o freelancer reportar que no recibió el pago."""
+    def __init__(self, parent, contrato_id, monto, mi_rol):
+        super().__init__(parent, "Reportar pago no recibido", 520)
+        self.contrato_id = contrato_id
+        self.monto = monto
+        self.mi_rol = mi_rol
+
+        self.root.addWidget(lbl("Reportar pago no recibido", "h2"))
+        self.root.addWidget(lbl(f"Contrato #{contrato_id}", "muted", wrap=True))
+        self.root.addWidget(lbl(f"Monto: {logic.money(monto)}", "accent", wrap=True))
+        self.root.addWidget(lbl("¿Por qué no recibiste el pago?", "muted", wrap=True))
+
+        self.motivo = QTextEdit()
+        self.motivo.setPlaceholderText("Explicá por qué no recibiste el pago (ej: nunca llegó el dinero, el monto es incorrecto, etc.)")
+        self.motivo.setMinimumHeight(100)
+        self.root.addWidget(self.motivo)
+
+        self.root.addWidget(btn("Reportar disputa", None, self.reportar), 0, Qt.AlignmentFlag.AlignLeft)
+        self.root.addWidget(btn("Cancelar", "secondary", self.reject), 0, Qt.AlignmentFlag.AlignRight)
+
+    def reportar(self):
+        motivo = self.motivo.toPlainText().strip()
+        if not motivo:
+            QMessageBox.warning(self, "Motivo requerido", "Escribí un motivo para reportar el pago no recibido.")
+            return
+
+        guard = ui_guard.BusyGuard(self, [])
+        guard.begin("Reportando disputa…")
+
+        def _on_result(pago_id):
+            guard.end()
+            QMessageBox.information(self, "Disputa abierta",
+                                    f"Se ha abierto una disputa para el pago del contrato #{self.contrato_id}.\n"
+                                    "Un administrador revisará el caso y decidirá si aprueba una compensación.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo reportar el pago", Exception(err))
+
+        async_service.async_reportar_pago_no_recibido(
+            self.contrato_id, self.user["id"], motivo,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
+
+
+# ======================================================================
+# Diálogo para reportar usuario por conducta (Foxy Lancer 3.2)
+# ======================================================================
+class ReportarUsuarioDialog(BaseDialog):
+    """Permite reportar a un usuario por conducta inapropiada (publicidad engañosa, no entrega, reseña falsa, estafa, etc.)."""
+    TIPOS_REPORTE = [
+        ("publicidad_engañosa", "Publicidad engañosa"),
+        ("no_entrega_trabajo", "No entrega el trabajo acordado"),
+        ("reseña_falsa", "Reseña falsa o manipulada"),
+        ("intento_estafa", "Intento de estafa"),
+        ("conducta_inapropiada", "Conducta inapropiada"),
+        ("pago_no_recibido", "Pago no recibido"),
+        ("otro", "Otro motivo"),
+    ]
+
+    def __init__(self, parent, reportado_id, reportado_nombre, contrato_id=None, solicitud_id=None):
+        super().__init__(parent, "Reportar usuario", 560)
+        self.reportado_id = reportado_id
+        self.reportado_nombre = reportado_nombre
+        self.contrato_id = contrato_id
+        self.solicitud_id = solicitud_id
+
+        self.root.addWidget(lbl("Reportar usuario", "h2"))
+        self.root.addWidget(lbl(f"Usuario: {reportado_nombre}", "muted", wrap=True))
+        self.root.addWidget(lbl("¿Por qué reportas a este usuario?", "muted", wrap=True))
+
+        self.tipo_reporte = QComboBox()
+        for valor, label in self.TIPOS_REPORTE:
+            self.tipo_reporte.addItem(label, valor)
+        self.root.addWidget(self.tipo_reporte)
+
+        self.root.addWidget(lbl("Describí lo que sucedió:", "muted", wrap=True))
+        self.motivo = QTextEdit()
+        self.motivo.setPlaceholderText("Explicá detalladamente qué pasó (ej: no entregó el trabajo, publicó información falsa, intentó estafar, etc.)")
+        self.motivo.setMinimumHeight(120)
+        self.root.addWidget(self.motivo)
+
+        self.root.addWidget(btn("Enviar reporte", None, self.reportar), 0, Qt.AlignmentFlag.AlignLeft)
+        self.root.addWidget(btn("Cancelar", "secondary", self.reject), 0, Qt.AlignmentFlag.AlignRight)
+
+    def reportar(self):
+        tipo = self.tipo_reporte.currentData()
+        motivo = self.motivo.toPlainText().strip()
+        if not motivo:
+            QMessageBox.warning(self, "Motivo requerido", "Escribí un motivo para reportar al usuario.")
+            return
+
+        guard = ui_guard.BusyGuard(self, [])
+        guard.begin("Enviando reporte…")
+
+        def _on_result(_):
+            guard.end()
+            QMessageBox.information(self, "Reporte enviado",
+                                    f"Se ha enviado un reporte contra {self.reportado_nombre}.\n"
+                                    "Un administrador revisará el caso y tomará las acciones correspondientes.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo enviar el reporte", Exception(err))
+
+        async_service.async_reportar_usuario(
+            self.reportado_id, self.user["id"], tipo, motivo,
+            self.contrato_id, self.solicitud_id,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
+
+
+# ======================================================================
+# Diálogos para rol Freelancer (Foxy Lancer 3.0)
+# ======================================================================
+class ExperienciaDialog(BaseDialog):
+    def __init__(self, parent, experiencia=None):
+        super().__init__(parent, "Agregar experiencia" if not experiencia else "Editar experiencia", 520)
+        self.experiencia = experiencia
+        form = QFormLayout()
+        form.setSpacing(10)
+        self.empresa = QLineEdit(experiencia["empresa"] if experiencia else "")
+        self.cargo = QLineEdit(experiencia["cargo"] if experiencia else "")
+        self.descripcion = QTextEdit()
+        self.descripcion.setPlainText(experiencia["descripcion"] if experiencia else "")
+        self.descripcion.setMinimumHeight(80)
+        self.fecha_inicio = QDateEdit()
+        self.fecha_inicio.setCalendarPopup(True)
+        self.fecha_inicio.setDisplayFormat("dd/MM/yyyy")
+        fi = experiencia["fecha_inicio"] if experiencia else None
+        if fi:
+            from datetime import date
+            if isinstance(fi, str):
+                fi = date.fromisoformat(fi)
+            self.fecha_inicio.setDate(fi)
+        self.fecha_fin = QDateEdit()
+        self.fecha_fin.setCalendarPopup(True)
+        self.fecha_fin.setDisplayFormat("dd/MM/yyyy")
+        self.fecha_fin.setSpecialValueText("Actual")
+        ff = experiencia["fecha_fin"] if experiencia else None
+        if ff:
+            from datetime import date
+            if isinstance(ff, str):
+                ff = date.fromisoformat(ff)
+            self.fecha_fin.setDate(ff)
+        else:
+            self.fecha_fin.setDate(self.fecha_inicio.date())
+        self.actual = QCheckBox("Trabajo actual")
+        self.actual.setChecked(bool(experiencia.get("actual")) if experiencia else False)
+        form.addRow("Empresa:", self.empresa)
+        form.addRow("Cargo:", self.cargo)
+        form.addRow("Descripción:", self.descripcion)
+        form.addRow("Fecha inicio:", self.fecha_inicio)
+        form.addRow("Fecha fin:", self.fecha_fin)
+        form.addRow("", self.actual)
+        root = self.root
+        root.addLayout(form)
+        self.buttons("Guardar", self.submit)
+
+    def submit(self):
+        try:
+            empresa = validation.validar_texto_obligatorio(self.empresa.text(), "Empresa")
+            cargo = validation.validar_texto_obligatorio(self.cargo.text(), "Cargo")
+            descripcion = validation.validar_texto_obligatorio(self.descripcion.toPlainText(), "Descripción", min_len=0)
+            fi = validation.validar_fecha(self.fecha_inicio.date().toPython(), "Fecha inicio")
+            ff = None
+            if not self.actual.isChecked():
+                ff = validation.validar_fecha(self.fecha_fin.date().toPython(), "Fecha fin")
+            actual = 1 if self.actual.isChecked() else 0
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
+            return
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Guardando experiencia…")
+
+        def _on_result(_):
+            guard.end()
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo guardar la experiencia", Exception(err))
+
+        async_service_async = None
+        # Usamos services directamente para no romper la firma existente
+        try:
+            services.guardar_experiencia(
+                self.parent().user["id"], empresa, cargo, descripcion, fi, ff, actual
+            )
+            QMessageBox.information(self, "Guardado", "Experiencia guardada correctamente.")
+            self.accept()
+        except Exception as exc:
+            handle(self, "No se pudo guardar la experiencia", exc)
+
+
+class ProyectoDialog(BaseDialog):
+    def __init__(self, parent, proyecto=None):
+        super().__init__(parent, "Agregar proyecto" if not proyecto else "Editar proyecto", 520)
+        self.proyecto = proyecto
+        form = QFormLayout()
+        form.setSpacing(10)
+        self.titulo = QLineEdit(proyecto["titulo"] if proyecto else "")
+        self.descripcion = QTextEdit()
+        self.descripcion.setPlainText(proyecto["descripcion"] if proyecto else "")
+        self.descripcion.setMinimumHeight(80)
+        self.enlace = QLineEdit(proyecto["enlace"] if proyecto else "")
+        self.tecnologias = QLineEdit(proyecto["tecnologias"] if proyecto else "")
+        self.tecnologias.setPlaceholderText("Ej.: Python, React, MySQL")
+        self.fecha = QDateEdit()
+        self.fecha.setCalendarPopup(True)
+        self.fecha.setDisplayFormat("dd/MM/yyyy")
+        fd = proyecto["fecha"] if proyecto else None
+        from datetime import date
+        if fd:
+            if isinstance(fd, str):
+                fd = date.fromisoformat(fd)
+            self.fecha.setDate(fd)
+        form.addRow("Título:", self.titulo)
+        form.addRow("Descripción:", self.descripcion)
+        form.addRow("Enlace (GitHub, portafolio, web):", self.enlace)
+        form.addRow("Tecnologías:", self.tecnologias)
+        form.addRow("Fecha:", self.fecha)
+        root = self.root
+        root.addLayout(form)
+        self.buttons("Guardar", self.submit)
+
+    def submit(self):
+        try:
+            titulo = validation.validar_texto_obligatorio(self.titulo.text(), "Título")
+            descripcion = validation.validar_texto_obligatorio(self.descripcion.toPlainText(), "Descripción", min_len=0)
+            enlace = validation.validar_enlace_proyecto(self.enlace.text())
+            tecnologias = validation.validar_tecnologias(self.tecnologias.text())
+            fecha = validation.validar_fecha(self.fecha.date().toPython(), "Fecha")
+        except validation.ValidationError as exc:
+            QMessageBox.warning(self, "Campo no válido", str(exc))
+            return
+
+        try:
+            services.guardar_proyecto(
+                self.parent().user["id"], titulo, descripcion, enlace, tecnologias, fecha
+            )
+            QMessageBox.information(self, "Guardado", "Proyecto guardado correctamente.")
+            self.accept()
+        except Exception as exc:
+            handle(self, "No se pudo guardar el proyecto", exc)
+
+
+class PerfilFreelancerDialog(BaseDialog):
+    """Ver perfil completo de un freelancer (experiencias, proyectos, reseñas)."""
+    def __init__(self, parent, user, freelancer_id):
+        super().__init__(parent, "Perfil del freelancer", 640)
+        self.user = user
+        self.freelancer_id = freelancer_id
+        self.root.addWidget(lbl("Perfil del freelancer", "h2"))
+        try:
+            perfil = services.obtener_perfil_freelancer_completo(freelancer_id)
+        except Exception as exc:
+            handle(self, "No se pudo cargar el perfil", exc)
+            return
+        if not perfil:
+            self.root.addWidget(lbl("Este perfil ya no existe.", "muted"))
+            return
+
+        col = QVBoxLayout()
+        col.setSpacing(10)
+        col.addWidget(lbl(perfil["nombre"], "h2"))
+        if perfil.get("promedio"):
+            col.addWidget(stars_label(perfil["promedio"], perfil.get("total_resenas", 0)))
+        if perfil.get("ubicacion"):
+            col.addWidget(lbl("📍 " + perfil["ubicacion"], "muted"))
+        if perfil.get("habilidades"):
+            col.addWidget(lbl("Habilidades", "h3"))
+            col.addWidget(chips_row(perfil["habilidades"], 10))
+        if perfil.get("presentacion"):
+            col.addWidget(lbl("Presentación", "h3"))
+            col.addWidget(lbl(perfil["presentacion"], wrap=True))
+        self.root.addLayout(col)
+
+        # Experiencias
+        exps = perfil.get("experiencias", [])
+        if exps:
+            self.root.addWidget(lbl("Experiencia laboral", "h3"))
+            for e in exps:
+                card = Card(shadow=False, pad=(14, 10, 14, 10), spacing=4)
+                card.lay.addWidget(lbl(f"{e['cargo']} en {e['empresa']}", "h3"))
+                card.lay.addWidget(lbl(f"{e['fecha_inicio']} - {'Actual' if e['actual'] else e['fecha_fin']}", "muted"))
+                if e.get("descripcion"):
+                    card.lay.addWidget(lbl(e["descripcion"], wrap=True))
+                self.root.addWidget(card)
+
+        # Proyectos
+        proys = perfil.get("proyectos", [])
+        if proys:
+            self.root.addWidget(lbl("Proyectos", "h3"))
+            for p in proys:
+                card = Card(shadow=False, pad=(14, 10, 14, 10), spacing=4)
+                card.lay.addWidget(lbl(p["titulo"], "h3"))
+                if p.get("enlace"):
+                    card.lay.addWidget(lbl(f"🔗 {p['enlace']}", "muted", wrap=True))
+                if p.get("tecnologias"):
+                    card.lay.addWidget(lbl(f"Tecnologías: {p['tecnologias']}", "muted"))
+                if p.get("descripcion"):
+                    card.lay.addWidget(lbl(p["descripcion"], wrap=True))
+                self.root.addWidget(card)
+
+        # Botón de contacto directo (chat) para contratantes
+        if self.user["rol"] == "contratante":
+            btn_contactar = btn("💬 Enviar mensaje", None, self.contactar_freelancer)
+            btn_contactar.setObjectName("secondary")
+            self.root.addWidget(btn_contactar, 0, Qt.AlignmentFlag.AlignLeft)
+        
+        # Botón de agregar a contactos para contratantes
+        if self.user["rol"] == "contratante":
+            ya_es_contacto = services.es_contacto_guardado(self.user["id"], self.freelancer_id)
+            if ya_es_contacto:
+                btn_agregar_contacto = btn("📋 Quitar de contactos", None, self.eliminar_contacto_freelancer)
+                btn_agregar_contacto.setObjectName("danger")
+            else:
+                btn_agregar_contacto = btn("📋 Agregar a contactos", None, self.agregar_contacto_freelancer)
+                btn_agregar_contacto.setObjectName("secondary")
+            self.root.addWidget(btn_agregar_contacto, 0, Qt.AlignmentFlag.AlignLeft)
+        
+        # Botón de reportar usuario
+        btn_reportar = btn("🚨 Reportar usuario", None, self.reportar_usuario_freelancer)
+        btn_reportar.setObjectName("danger")
+        self.root.addWidget(btn_reportar, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.root.addStretch(1)
+        self.root.addWidget(btn("Cerrar", None, self.accept), 0, Qt.AlignmentFlag.AlignRight)
+
+    def contactar_freelancer(self):
+        """Abre un chat con el freelancer, creando una solicitud de contacto si no existe."""
+        try:
+            solicitud_id = services.obtener_o_crear_solicitud_contacto(
+                self.user["id"], self.freelancer_id
+            )
+            if solicitud_id:
+                d = ChatDialog(self, self.user, solicitud_id)
+                d.exec()
+            else:
+                QMessageBox.information(self, "Sin trabajo",
+                                        "No hay un trabajo publicado entre ustedes para iniciar una conversación.")
+        except Exception as exc:
+            handle(self, "No se pudo abrir el chat", exc)
+
+    def agregar_contacto_freelancer(self):
+        """Agrega al freelancer a los contactos guardados del contratante."""
+        try:
+            nombre_apodo, ok = QInputDialog.getText(self, "Nombre para el contacto", 
+                f"¿Cómo quieres llamar a {perfil['nombre']} en tus contactos?", 
+                text=perfil["nombre"])
+            if not ok:
+                return
+            if not nombre_apodo.strip():
+                nombre_apodo = perfil["nombre"]
+            
+            services.agregar_contacto(self.user["id"], self.freelancer_id, nombre_apodo.strip())
+            QMessageBox.information(self, "Contacto agregado", 
+                f"{perfil['nombre']} ha sido agregado a tus contactos.\n"
+                "Podrás comunicarte con él desde la página de 'Mis contactos'.")
+            self.accept()
+        except Exception as exc:
+            handle(self, "No se pudo agregar el contacto", exc)
+
+    def eliminar_contacto_freelancer(self):
+        """Elimina al freelancer de los contactos guardados del contratante."""
+        try:
+            services.eliminar_contacto(self.user["id"], self.freelancer_id)
+            QMessageBox.information(self, "Contacto eliminado", 
+                f"{perfil['nombre']} ha sido eliminado de tus contactos.")
+            self.accept()
+        except Exception as exc:
+            handle(self, "No se pudo eliminar el contacto", exc)
+
+    def reportar_usuario_freelancer(self):
+        """Abre el diálogo para reportar al freelancer por conducta inapropiada."""
+        d = ReportarUsuarioDialog(self, self.freelancer_id, perfil["nombre"])
+        if d.exec() == QDialog.DialogCode.Accepted:
+            QMessageBox.information(self, "Reporte enviado",
+                                    f"Se ha enviado un reporte contra {perfil['nombre']}.\n"
+                                    "Un administrador revisará el caso y tomará las acciones correspondientes.")
+
+
+# ======================================================================
+# Diálogos para rol Contratante (Foxy Lancer 3.0)
+# ======================================================================
+class MensajeRechazoDialog(BaseDialog):
+    def __init__(self, parent, freelancer_nombre, trabajo_titulo):
+        super().__init__(parent, "Mensaje de rechazo", 520)
+        self.root.addWidget(lbl("Mensaje para " + freelancer_nombre, "h2"))
+        self.root.addWidget(lbl(f"Trabajo: {trabajo_titulo}", "muted", wrap=True))
+        self.mensaje = QTextEdit()
+        self.mensaje.setPlaceholderText("Escribí un mensaje personalizado para este postulante…")
+        self.mensaje.setMinimumHeight(120)
+        self.root.addWidget(self.mensaje)
+        self.buttons("Enviar mensaje", self.submit)
+
+    def submit(self):
+        texto = self.mensaje.toPlainText().strip()
+        if not texto:
+            QMessageBox.warning(self, "Mensaje requerido", "Escribí un mensaje antes de enviar.")
+            return
+        self.accept()
+
+
+class ContratarDialog(BaseDialog):
+    """El contratante revisa solicitudes y contrata o rechaza."""
+    def __init__(self, parent, user, trabajo):
+        super().__init__(parent, "Contratar freelancer", 640)
+        self.user = user
+        self.trabajo = trabajo
+        self.root.addWidget(lbl(f"Trabajo: {trabajo['titulo']}", "h2"))
+        self.root.addWidget(lbl(f"Presupuesto: {logic.money(trabajo['presupuesto'])}", "muted", wrap=True))
+
+        try:
+            self.solicitudes = services.listar_solicitudes_trabajo(trabajo["id"], user["id"])
+        except Exception as exc:
+            handle(self, "No se pudieron cargar las solicitudes", exc)
+            self.solicitudes = []
+
+        cont, col = _list_container(8)
+        if not self.solicitudes:
+            col.addWidget(lbl("Todavía no hay solicitudes para este trabajo.", "muted"))
+        for s in self.solicitudes:
+            card = Card(shadow=False, pad=(14, 10, 14, 10), spacing=6)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(s["freelancer_nombre"], "h3", wrap=True), 1)
+            head.addWidget(state_badge(s["estado"]))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"{s['freelancer_correo']}", "muted"))
+            if s.get("habilidades"):
+                card.lay.addWidget(lbl(f"Habilidades: {s['habilidades']}", "muted"))
+            if s.get("presentacion"):
+                card.lay.addWidget(lbl(f"“{s['presentacion']}”", wrap=True))
+
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            if s["estado"] == "Pendiente":
+                btn_contratar = btn("Contratar", None, lambda sid=s["id"], fid=s["freelancer_id"]: self.contratar(sid, fid))
+                btn_rechazar = btn("Rechazar", "secondary", lambda sid=s["id"], fn=s["freelancer_nombre"]: self.rechazar(sid, fn))
+                row.addWidget(btn_contratar)
+                row.addWidget(btn_rechazar)
+            row.addWidget(btn("Ver perfil", "ghost", lambda fid=s["freelancer_id"]: self.ver_perfil(fid)))
+            card.lay.addLayout(row)
+            col.addWidget(card)
+        col.addStretch(1)
+        self.root.addWidget(_scroll(cont, 300), 1)
+        self.root.addWidget(btn("Cerrar", None, self.accept), 0, Qt.AlignmentFlag.AlignRight)
+
+    def ver_perfil(self, freelancer_id):
+        d = PerfilFreelancerDialog(self, self.user, freelancer_id)
+        d.exec()
+
+    def contratar(self, solicitud_id, freelancer_id):
+        guard = ui_guard.BusyGuard(self, [])
+        guard.begin("Contrando freelancer…")
+
+        def _on_result(resultado):
+            guard.end()
+            contrato_id = resultado if isinstance(resultado, int) else None
+            if contrato_id:
+                QMessageBox.information(self, "¡Contratado!", 
+                    f"El freelancer ha sido contratado.\n"
+                    f"Se ha creado automáticamente el contrato #{contrato_id}.\n"
+                    "El chat está habilitado para ambas partes.\n"
+                    "Podés acordar el monto y las condiciones en el chat.")
+            else:
+                QMessageBox.information(self, "Contratado", "El freelancer ha sido contratado. El trabajo se cerró para otros postulantes.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo contratar", Exception(err))
+
+        async_service.async_contratar_freelancer(
+            self.trabajo["id"], solicitud_id, freelancer_id, self.user["id"],
+            on_result=_on_result,
+            on_error=_on_error,
+        )
+
+    def rechazar(self, solicitud_id, freelancer_nombre):
+        d = MensajeRechazoDialog(self, freelancer_nombre, self.trabajo["titulo"])
+        if d.exec() == QDialog.DialogCode.Accepted:
+            texto = d.mensaje.toPlainText().strip()
+            try:
+                services.rechazar_postulante_individual(
+                    self.trabajo["id"], solicitud_id, self.user["id"], texto if texto else None
+                )
+                QMessageBox.information(self, "Rechazado", "El postulante ha sido notificado.")
+                self.accept()
+            except Exception as exc:
+                handle(self, "No se pudo rechazar al postulante", exc)
+
+
+# ======================================================================
+# Diálogo para configurar el rol del usuario (Foxy Lancer 3.0)
+# ======================================================================
+class ConfigurarRolDialog(BaseDialog):
+    """Permite al usuario elegir si es contratante o freelancer."""
+    def __init__(self, parent, user, rol_actual):
+        super().__init__(parent, "Configurar tu perfil", 520)
+        self.user = user
+        self.rol_actual = rol_actual
+        self.root.addWidget(lbl("¿Cómo te vas a usar la plataforma?", "h2"))
+        self.root.addWidget(lbl("Elegí tu rol principal:", "muted", wrap=True))
+
+        self.group = QButtonGroup()
+        self.rb_contratante = QRadioButton("🏢 Contratante / Empresa")
+        self.rb_freelancer = QRadioButton("💼 Freelancer / Trabajador independiente")
+        self.rb_contratante.setToolTip("Publicá trabajos, buscá talento y contratá freelancers.")
+        self.rb_freelancer.setToolTip("Postulate a trabajos, subí tu experiencia y proyectos.")
+
+        if rol_actual == "contratante":
+            self.rb_contratante.setChecked(True)
+        else:
+            self.rb_freelancer.setChecked(True)
+
+        self.group.addButton(self.rb_contratante)
+        self.group.addButton(self.rb_freelancer)
+
+        self.root.addWidget(self.rb_contratante)
+        self.root.addWidget(self.rb_freelancer)
+        self.root.addWidget(lbl("Podés cambiarlo después desde tu perfil si tus necesidades cambian.", "muted", wrap=True))
+        self.buttons("Guardar rol", self.submit)
+
+    def submit(self):
+        nuevo = "contratante" if self.rb_contratante.isChecked() else "freelancer"
+        if nuevo == self.rol_actual:
+            QMessageBox.information(self, "Sin cambios", "Ya tenés ese rol seleccionado.")
+            self.accept()
+            return
+
+        guard = ui_guard.BusyGuard(self, [self.ok_btn])
+        guard.begin("Guardando rol…")
+
+        def _on_result(rol_guardado):
+            guard.end()
+            QMessageBox.information(
+                self,
+                "Rol actualizado",
+                f"Tu perfil ahora es: {'Contratante / Empresa' if rol_guardado == 'contratante' else 'Freelancer / Trabajador independiente'}."
+                "\n\nCerrá y volvé a abrir la app para que los cambios de menú se apliquen.",
+            )
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo guardar el rol", Exception(err))
+
+        async_service.async_set_user_role_own(
+            self.user["id"], nuevo,
+            on_result=_on_result,
+            on_error=_on_error,
+        )
+
+
+# ======================================================================
+# Diálogo para confirmar pago (Foxy Lancer 3.1)
+# ======================================================================
+class ConfirmarPagoDialog(BaseDialog):
+    """Permite al contratante o freelancer confirmar que recibió el pago."""
+    def __init__(self, parent, contrato_id, monto, mi_rol, estado_actual):
+        super().__init__(parent, "Confirmar pago", 520)
+        self.contrato_id = contrato_id
+        self.monto = monto
+        self.mi_rol = mi_rol
+
+        self.root.addWidget(lbl("Confirmar recepción de pago", "h2"))
+        self.root.addWidget(lbl(f"Contrato #{contrato_id}", "muted", wrap=True))
+        self.root.addWidget(lbl(f"Monto: {logic.money(monto)}", "accent", wrap=True))
+
+        self.root.addWidget(lbl(f"Estado actual: {estado_actual.get('estado', 'Pendiente')}", "muted", wrap=True))
+        self.root.addWidget(lbl(f"¿Confirmás que el pago de {logic.money(monto)} se realizó correctamente?", "muted", wrap=True))
+
+        self.btn_confirmar = btn("Sí, confirmé el pago", None, self.confirmar)
+        self.btn_confirmar.setObjectName("secondary")
+        self.root.addWidget(self.btn_confirmar)
+
+        self.root.addWidget(lbl("Una vez que ambas partes confirmen, el pago quedará como completado.", "small", wrap=True))
+        self.root.addWidget(btn("Cancelar", "secondary", self.reject), 0, Qt.AlignmentFlag.AlignRight)
+
+    def confirmar(self):
+        guard = ui_guard.BusyGuard(self, [self.btn_confirmar])
+        guard.begin("Confirmando pago…")
+
+        def _on_result(nuevo_estado):
+            guard.end()
+            if nuevo_estado == "Completado":
+                QMessageBox.information(self, "Pago completado",
+                                        "¡Ambas partes confirmaron el pago! El contrato queda como completado.")
+            else:
+                QMessageBox.information(self, "Pago confirmado",
+                                        "Tu confirmación fue registrada. Esperando a que la otra parte confirme.")
+            self.accept()
+
+        def _on_error(err):
+            guard.end()
+            handle(self, "No se pudo confirmar el pago", Exception(err))
+
+        async_service.async_confirmar_pago(
+            self.contrato_id, self.mi_rol,
+            on_result=_on_result,
+            on_error=_on_error,
+        )

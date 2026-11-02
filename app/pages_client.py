@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QFrame, QLabel, QLineEdit, QCheckBox, QComboBox, QSlider,
-    QTextEdit, QToolButton, QMenu, QScrollArea, QFileDialog, QMessageBox, QInputDialog, QSizePolicy,
+    QTextEdit, QToolButton, QMenu, QScrollArea, QFileDialog, QMessageBox, QInputDialog, QSizePolicy, QDialog,
 )
 
 from . import services, logic, ai
@@ -13,6 +13,8 @@ from . import theme as th
 from .dialogs import (
     ApplyDialog, ChatDialog, ContractDialog, InterviewDialog, ProfileViewDialog, ReportDialog, ReviewDialog,
     SavedSearchesDialog, ChangePasswordDialog,
+    ExperienciaDialog, ProyectoDialog, PerfilFreelancerDialog, ContratarDialog, MensajeRechazoDialog,
+    ConfigurarRolDialog, ConfirmarPagoDialog, ReportarUsuarioDialog,
 )
 from .errors import handle
 from .calendar_widgets import MonthCalendar
@@ -118,7 +120,12 @@ class JobCardV2(Card):
         self.fav = btn("♥" if job["es_favorito"] else "♡", "iconBtn", self.toggle_fav, "Guardar en favoritos")
         foot.addWidget(self.fav)
         foot.addWidget(btn("Ver detalle", "secondary", self.open_detail))
-        if job["ya_aplico"]:
+        if job["cliente_id"] == self.shell.user["id"]:
+            # Es el dueño del anuncio: mostrar "Revisar tu anuncio" en lugar de postular
+            btn_revisar = btn("Revisar tu anuncio", None, self.open_detail)
+            btn_revisar.setObjectName("secondary")
+            foot.addWidget(btn_revisar)
+        elif job["ya_aplico"]:
             done = btn("Ya aplicaste", None)
             done.setEnabled(False)
             foot.addWidget(done)
@@ -541,7 +548,11 @@ class JobDetailPage(QWidget):
         row.addWidget(btn("⚑ Reportar", "ghost", lambda: shell.report("trabajo", job["id"], job["titulo"])))
         row.addStretch(1)
         row.addWidget(btn("Proponer entrevista", "secondary", self.interview))
-        if job["ya_aplico"]:
+        if job["cliente_id"] == self.user["id"]:
+            btn_revisar = btn("Revisar tu anuncio", None, lambda: self.shell.go("detail", job_id=self.job["id"]))
+            btn_revisar.setObjectName("secondary")
+            row.addWidget(btn_revisar)
+        elif job["ya_aplico"]:
             done = btn("Ya aplicaste", None)
             done.setEnabled(False)
             row.addWidget(done)
@@ -1109,6 +1120,7 @@ class ProfilePage(QWidget):
         self.comment.setMaxLength(500)
         form.lay.addWidget(self.comment)
         form.lay.addWidget(btn("Guardar perfil", None, self.save), 0, Qt.AlignmentFlag.AlignRight)
+        form.lay.addWidget(btn("Configurar mi rol", None, self.configurar_rol), 0, Qt.AlignmentFlag.AlignRight)
         right.addWidget(form)
         rev = Card(pad=(22, 18, 22, 18), spacing=8)
         rev.lay.addWidget(lbl(f"Reseñas recibidas ({len(reviews)})", "h3"))
@@ -1174,6 +1186,26 @@ class ProfilePage(QWidget):
         toast(self.shell, "Perfil guardado")
         self.shell.go("profile")
 
+    def configurar_rol(self):
+        d = ConfigurarRolDialog(self.shell, self.user, self.user.get("rol", "freelancer"))
+        if d.exec() == QDialog.DialogCode.Accepted:
+            # Recargar datos del usuario para reflejar el nuevo rol
+            try:
+                from . import services as svc
+                usuario_actualizado = svc.fetchone(
+                    "SELECT id,nombre,correo,rol,activo FROM usuarios WHERE id=%s", (self.user["id"],)
+                )
+                if usuario_actualizado:
+                    self.user["rol"] = usuario_actualizado["rol"]
+                    QMessageBox.information(
+                        self.shell,
+                        "Rol configurado",
+                        f"Tu rol ahora es: {'Contratante / Empresa' if usuario_actualizado['rol'] == 'contratante' else 'Freelancer / Trabajador independiente'}."
+                        "\n\nCerrá y volvé a abrir la app para ver el menú correspondiente a tu nuevo rol.",
+                    )
+            except Exception as exc:
+                handle(self.shell, "No se pudo recargar el perfil", exc)
+
 
 # ======================================================================
 #  Comunidad (perfiles y reseñas)
@@ -1236,6 +1268,7 @@ class CommunityPage(QWidget):
             row.setSpacing(8)
             row.addStretch(1)
             row.addWidget(btn("Ver perfil", "secondary", lambda pid=p["id"]: self.view(pid)))
+            row.addWidget(btn("🚨 Reportar usuario", None, lambda pid=p["id"], pn=p["nombre"]: self.reportar_usuario(pid, pn)), 0)
             can = False
             if self.user["rol"] != "admin":
                 try:
@@ -1258,3 +1291,387 @@ class CommunityPage(QWidget):
         if ReviewDialog(self.shell, self.user, person_id, name).exec() == ReviewDialog.DialogCode.Accepted:
             toast(self.shell, "Reseña guardada")
             self.render()
+
+    def reportar_usuario(self, reportado_id, reportado_nombre):
+        """Abre el diálogo para reportar a un usuario por conducta inapropiada."""
+        d = ReportarUsuarioDialog(self.shell, reportado_id, reportado_nombre)
+        if d.exec() == QDialog.DialogCode.Accepted:
+            toast(self.shell, "Reporte enviado")
+            self.render()
+
+
+# ======================================================================
+# Páginas para rol Contratante (Foxy Lancer 3.0)
+# ======================================================================
+class MisTrabajosContratantePage(QWidget):
+    """Lista los trabajos publicados por el contratante con opción de ver solicitudes."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.user = shell, shell.user
+        root, v = padded_page(shell, "Mis trabajos publicados", "Gestioná tus ofertas y revisá quién se postuló.",
+                              [btn("+ Publicar trabajo", None, self.shell.publish_job)])
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            trabajos = services.listar_trabajos_por_contratante(self.user["id"])
+        except Exception as exc:
+            trabajos = []
+            handle(self.shell, "No se pudieron cargar tus trabajos", exc)
+        if not trabajos:
+            self.holder.addWidget(EmptyState("📭", "No publicaste trabajos todavía",
+                                             "Publicá tu primera oferta para recibir postulantes.", "Publicar trabajo", self.shell.publish_job))
+            return
+        for t in trabajos:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(t["titulo"], "h3", wrap=True), 1)
+            head.addWidget(state_badge(t["estado"]))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"{t['categoria']} · {t['modalidad']} · {logic.money(t['presupuesto'])}", "muted"))
+            card.lay.addWidget(lbl(f"👥 {t['total_solicitudes']} solicitud(es) · 🤝 {t['contrataciones']} contratación(es)", "accent"))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            if t["estado"] == "Publicado":
+                row.addWidget(btn("Ver solicitudes", None, lambda tid=t["id"]: self.ver_solicitudes(tid)))
+                row.addWidget(btn("Editar", "secondary", lambda tj=t: self.shell.edit_job(tj)))
+                row.addWidget(btn("Cerrar", "danger", lambda tid=t["id"]: self.cerrar(tid)))
+            else:
+                row.addWidget(btn("Reabrir", "secondary", lambda tid=t["id"]: self.reabrir(tid)))
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def ver_solicitudes(self, trabajo_id):
+        try:
+            trabajos = services.listar_trabajos_por_contratante(self.user["id"])
+        except Exception as exc:
+            handle(self.shell, "No se pudo cargar el trabajo", exc)
+            return
+        trabajo = next((t for t in trabajos if t["id"] == trabajo_id), None)
+        if trabajo:
+            d = ContratarDialog(self.shell, self.user, trabajo)
+            if d.exec() == QDialog.DialogCode.Accepted:
+                self.render()
+
+    def cerrar(self, trabajo_id):
+        try:
+            services.set_job_state(self.user, trabajo_id, "Cerrado")
+        except Exception as exc:
+            handle(self.shell, "No se pudo cerrar el trabajo", exc)
+            return
+        self.render()
+
+    def reabrir(self, trabajo_id):
+        try:
+            services.set_job_state(self.user, trabajo_id, "Publicado")
+        except Exception as exc:
+            handle(self.shell, "No se pudo reabrir el trabajo", exc)
+            return
+        self.render()
+
+
+class ContratacionesPage(QWidget):
+    """Página resumen de contrataciones del contratante."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.user = shell, shell.user
+        root, v = padded_page(shell, "Contrataciones", "Gestioná tus contrataciones activas y revisá postulantes.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            rows = fetchall = None
+        except Exception:
+            pass
+        try:
+            from . import services as svc
+            rows = svc.fetchall("""SELECT c.id, c.estado, c.creado_en, c.mensaje_rechazo,
+                                          t.titulo AS trabajo, u.nombre AS freelancer_nombre,
+                                          u.correo AS freelancer_correo
+                                   FROM contrataciones c
+                                   JOIN trabajos t ON t.id=c.trabajo_id
+                                   JOIN usuarios u ON u.id=c.freelancer_id
+                                   WHERE c.contratante_id=%s
+                                   ORDER BY c.creado_en DESC""", (self.user["id"],))
+        except Exception as exc:
+            rows = []
+            handle(self.shell, "No se pudieron cargar las contrataciones", exc)
+        if not rows:
+            self.holder.addWidget(EmptyState("🤝", "No hay contrataciones todavía",
+                                             "Cuando contrates a un freelancer, aparecerá aquí."))
+            return
+        for r in rows:
+            card = Card(pad=(20, 16, 20, 16), spacing=7)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(r["freelancer_nombre"], "h3", wrap=True), 1)
+            head.addWidget(state_badge(r["estado"]))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Trabajo: {r['trabajo']}", "muted"))
+            card.lay.addWidget(lbl(f"{r['freelancer_correo']}", "muted"))
+            if r.get("mensaje_rechazo"):
+                card.lay.addWidget(lbl(f"Mensaje: {logic.truncate(r['mensaje_rechazo'], 120)}", "muted", wrap=True))
+            self.holder.addWidget(card)
+
+
+# ======================================================================
+# Páginas para rol Freelancer (Foxy Lancer 3.0)
+# ======================================================================
+class PerfilFreelancerPage(QWidget):
+    """Perfil completo del freelancer logueado (solo lectura + acciones de editar)."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.user = shell, shell.user
+        root, v = padded_page(shell, "Mi perfil de freelancer", "Tu presentación, experiencia y proyectos para los contratantes.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.body = QVBoxLayout()
+        v.addLayout(self.body)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.body)
+        try:
+            perfil = services.obtener_perfil_freelancer_completo(self.user["id"])
+        except Exception as exc:
+            handle(self.shell, "No se pudo cargar tu perfil", exc)
+            return
+        if not perfil:
+            self.body.addWidget(lbl("No se pudo cargar el perfil.", "muted"))
+            return
+        col = QVBoxLayout()
+        col.setSpacing(12)
+        col.addWidget(lbl(perfil["nombre"], "h2"))
+        if perfil.get("promedio"):
+            col.addWidget(stars_label(perfil["promedio"], perfil.get("total_resenas", 0)))
+        if perfil.get("ubicacion"):
+            col.addWidget(lbl("📍 " + perfil["ubicacion"], "muted"))
+        if perfil.get("habilidades"):
+            col.addWidget(lbl("Habilidades", "h3"))
+            col.addWidget(chips_row(perfil["habilidades"], 10))
+        if perfil.get("presentacion"):
+            col.addWidget(lbl("Presentación", "h3"))
+            col.addWidget(lbl(perfil["presentacion"], wrap=True))
+        self.body.addLayout(col)
+
+        exps = perfil.get("experiencias", [])
+        if exps:
+            self.body.addWidget(lbl("Experiencia laboral", "h3"))
+            for e in exps:
+                card = Card(shadow=False, pad=(14, 10, 14, 10), spacing=4)
+                card.lay.addWidget(lbl(f"{e['cargo']} en {e['empresa']}", "h3"))
+                card.lay.addWidget(lbl(f"{e['fecha_inicio']} - {'Actual' if e['actual'] else e['fecha_fin']}", "muted"))
+                if e.get("descripcion"):
+                    card.lay.addWidget(lbl(e["descripcion"], wrap=True))
+                self.body.addWidget(card)
+
+        proys = perfil.get("proyectos", [])
+        if proys:
+            self.body.addWidget(lbl("Proyectos", "h3"))
+            for p in proys:
+                card = Card(shadow=False, pad=(14, 10, 14, 10), spacing=4)
+                card.lay.addWidget(lbl(p["titulo"], "h3"))
+                if p.get("enlace"):
+                    card.lay.addWidget(lbl(f"🔗 {p['enlace']}", "muted", wrap=True))
+                if p.get("tecnologias"):
+                    card.lay.addWidget(lbl(f"Tecnologías: {p['tecnologias']}", "muted"))
+                if p.get("descripcion"):
+                    card.lay.addWidget(lbl(p["descripcion"], wrap=True))
+                self.body.addWidget(card)
+
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(btn("Agregar experiencia", None, lambda: self.shell.go("mis_experiencias")))
+        row.addWidget(btn("Agregar proyecto", None, lambda: self.shell.go("mis_proyectos")))
+        self.body.addLayout(row)
+
+
+class MisExperienciasPage(QWidget):
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.user = shell, shell.user
+        root, v = padded_page(shell, "Mis experiencias", "Gestioná tu historial laboral.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            exps = services.listar_experiencias(self.user["id"])
+        except Exception as exc:
+            exps = []
+            handle(self.shell, "No se pudieron cargar las experiencias", exc)
+        if not exps:
+            self.holder.addWidget(EmptyState("💼", "No tienes experiencias todavía",
+                                             "Agregá tu primer empleo para completar tu perfil.", "Agregar experiencia", self.agregar))
+            return
+        for e in exps:
+            card = Card(pad=(20, 16, 20, 16), spacing=7)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(f"{e['cargo']} en {e['empresa']}", "h3", wrap=True), 1)
+            head.addWidget(lbl("Actual" if e["actual"] else e["fecha_fin"], "muted"))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"{e['fecha_inicio']}", "muted"))
+            if e.get("descripcion"):
+                card.lay.addWidget(lbl(logic.truncate(e["descripcion"], 150), wrap=True))
+            self.holder.addWidget(card)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(btn("+ Nueva experiencia", None, self.agregar))
+        self.holder.addLayout(row)
+
+    def agregar(self):
+        d = ExperienciaDialog(self.shell)
+        if d.exec() == QDialog.DialogCode.Accepted:
+            self.render()
+
+
+class MisProyectosPage(QWidget):
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.user = shell, shell.user
+        root, v = padded_page(shell, "Mis proyectos", "Mostrá tus trabajos y enlaces de portafolio.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            proys = services.listar_proyectos(self.user["id"])
+        except Exception as exc:
+            proys = []
+            handle(self.shell, "No se pudieron cargar los proyectos", exc)
+        if not proys:
+            self.holder.addWidget(EmptyState("🚀", "No tienes proyectos todavía",
+                                             "Agregá tu primer proyecto para mostrar tu trabajo.", "Agregar proyecto", self.agregar))
+            return
+        for p in proys:
+            card = Card(pad=(20, 16, 20, 16), spacing=7)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(p["titulo"], "h3", wrap=True), 1)
+            head.addWidget(lbl(p.get("fecha", ""), "muted"))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Tecnologías: {p['tecnologias']}", "muted"))
+            if p.get("enlace"):
+                card.lay.addWidget(lbl(f"🔗 {p['enlace']}", "muted", wrap=True))
+            if p.get("descripcion"):
+                card.lay.addWidget(lbl(logic.truncate(p["descripcion"], 150), wrap=True))
+            self.holder.addWidget(card)
+        row = QHBoxLayout()
+        row.addStretch(1)
+        row.addWidget(btn("+ Nuevo proyecto", None, self.agregar))
+        self.holder.addLayout(row)
+
+    def agregar(self):
+        d = ProyectoDialog(self.shell)
+        if d.exec() == QDialog.DialogCode.Accepted:
+            self.render()
+
+
+# ======================================================================
+# Página de Mis contactos (Foxy Lancer 3.3)
+# Permite a contratantes y freelancers ver y gestionar sus contactos guardados
+# ======================================================================
+class MisContactosPage(QWidget):
+    """Lista los contactos guardados del usuario."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.user = shell, shell.user
+        root, v = padded_page(shell, "Mis contactos", "Gestioná tus contactos guardados y chateá con ellos.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            contactos = services.listar_contactos_guardados(self.user["id"])
+        except Exception as exc:
+            contactos = []
+            handle(self.shell, "No se pudieron cargar los contactos", exc)
+        if not contactos:
+            self.holder.addWidget(EmptyState("📇", "No tienes contactos guardados",
+                                             "Agrega contactos desde los perfiles de los freelancers para poder comunicarte con ellos después."))
+            return
+        for c in contactos:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(c["nombre_apodo"] or c["nombre"], "h3", wrap=True), 1)
+            rol_badge = badge("Contratante", "info") if c["rol"] == "contratante" else badge("Freelancer", "success")
+            head.addWidget(rol_badge)
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Rol: {c['rol'].capitalize()}", "muted"))
+            card.lay.addWidget(lbl(f"Estado: {'Activo' if c['activo'] else 'Inactivo'}", "muted"))
+            if c["notas"]:
+                card.lay.addWidget(lbl(f"Notas: {c['notas']}", "muted", wrap=True))
+            card.lay.addWidget(lbl(f"Agregado: {logic.fmt_dt(c['fecha_guardado'])}", "muted"))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            row.addWidget(btn("💬 Mensaje", None, lambda cid=c["contacto_id"]: self.chatear_con_contacto(cid)), 0)
+            row.addWidget(btn("🗑️ Quitar", "danger", lambda cid=c["contacto_id"]: self.eliminar_contacto(cid)), 0)
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def chatear_con_contacto(self, contacto_id):
+        """Abre un chat con un contacto guardado."""
+        try:
+            solicitud_id = services.obtener_o_crear_solicitud_contacto(
+                self.user["id"], contacto_id
+            )
+            if solicitud_id:
+                d = ChatDialog(self.shell, self.user, solicitud_id)
+                d.exec()
+            else:
+                QMessageBox.information(self, "Sin trabajo",
+                                        "No hay un trabajo publicado entre ustedes para iniciar una conversación.")
+        except Exception as exc:
+            handle(self.shell, "No se pudo abrir el chat", exc)
+
+    def eliminar_contacto(self, contacto_id):
+        """Elimina un contacto guardado."""
+        d = QMessageBox.question(self, "Eliminar contacto",
+                                 "¿Estás seguro de eliminar este contacto?",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if d == QMessageBox.StandardButton.Yes:
+            try:
+                services.eliminar_contacto(self.user["id"], contacto_id)
+                QMessageBox.information(self, "Contacto eliminado", "El contacto ha sido eliminado.")
+                self.render()
+            except Exception as exc:
+                handle(self.shell, "No se pudo eliminar el contacto", exc)

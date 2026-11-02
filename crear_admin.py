@@ -1,20 +1,25 @@
 from getpass import getpass
 from database import get_connection
-from security import hash_password
+from security import hash_password, validar_fortaleza_password
+from app import validation
 
 
 def main():
     print("Crear o actualizar administrador de Foxy Lancer")
     nombre = input("Nombre del administrador: ").strip()
     correo = input("Correo del administrador: ").strip().lower()
-    password = getpass("Contraseña (mínimo 8 caracteres): ")
+    password = getpass("Contraseña (mínimo 8 caracteres, mayúscula, minúscula y número): ")
     confirmacion = getpass("Repite la contraseña: ")
 
-    if not nombre or not correo or "@" not in correo:
-        print("Nombre o correo no válido.")
+    if not nombre or not correo:
+        print("Nombre y correo son obligatorios.")
         return
-    if len(password) < 8:
-        print("La contraseña debe tener al menos 8 caracteres.")
+    try:
+        nombre = validation.validar_nombre(nombre)
+        correo = validation.validar_email(correo)
+        password = validar_fortaleza_password(password)
+    except ValueError as exc:
+        print("Error de validación:", exc)
         return
     if password != confirmacion:
         print("Las contraseñas no coinciden.")
@@ -34,7 +39,7 @@ def main():
             print("Cuenta existente convertida en administrador.")
         else:
             cursor.execute(
-                "INSERT INTO usuarios (nombre, correo, password_hash, rol) VALUES (%s,%s,%s,'admin')",
+                "INSERT INTO usuarios (nombre, correo, password_hash, rol, activo) VALUES (%s,%s,%s,'admin',1)",
                 (nombre, correo, hashed)
             )
             print("Administrador creado.")

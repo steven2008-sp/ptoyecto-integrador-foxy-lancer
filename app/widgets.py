@@ -368,23 +368,32 @@ def small_btn(text, kind="secondary", slot=None, tip=None):
 
 # ------------------------------------------------------------ errores y avisos
 def ui_error(parent, title, exc):
-    """Muestra un error amigable (y lo registra) sin cerrar la aplicación."""
+    """Muestra un error amigable (y lo registra) sin cerrar la aplicación.
+
+    Nunca expone detalles internos de MySQL, nombres de tablas ni trazas al usuario.
+    """
     import logging
-    detail = str(exc)
-    if isinstance(exc, (ValueError, PermissionError)):
-        QMessageBox.warning(parent, title, detail)
+    from . import validation
+    logging.getLogger("mypines").exception("Error de UI: %s", title)
+    if isinstance(exc, validation.ValidationError):
+        QMessageBox.warning(parent, title, str(exc))
         return
-    logging.getLogger("mypines").exception("%s: %s", title, detail)
+    if isinstance(exc, PermissionError):
+        QMessageBox.warning(parent, title, "No tenés permiso para realizar esta acción.")
+        return
     errno = getattr(exc, "errno", None)
+    detail = str(exc)
     if errno == 1146 or "doesn't exist" in detail.lower():
-        hint = "\n\nFalta una tabla de Foxy Lancer. Cierra y vuelve a abrir la aplicación para que se creen automáticamente."
+        user_msg = "Falta una tabla de Foxy Lancer. Cerrá y volvé a abrir la aplicación para que se creen automáticamente."
     elif errno == 1045 or "access denied" in detail.lower():
-        hint = "\n\nMySQL rechazó el usuario o la contraseña. Revisá MYSQL_USER y MYSQL_PASSWORD en el archivo .env."
+        user_msg = "MySQL rechazó el usuario o la contraseña. Revisá MYSQL_USER y MYSQL_PASSWORD en el archivo .env."
     elif errno == 2003 or "can't connect" in detail.lower():
-        hint = "\n\nNo se pudo alcanzar el servidor MySQL. Comprobá que el servicio MySQL80 esté en ejecución."
+        user_msg = "No se pudo alcanzar el servidor MySQL. Comprobá que el servicio MySQL80 esté en ejecución."
+    elif isinstance(exc, ValueError):
+        user_msg = detail
     else:
-        hint = "\n\nNo se borró ningún dato. Si el problema continúa, revisá el archivo mypines.log."
-    QMessageBox.critical(parent, title, detail + hint)
+        user_msg = "Ocurrió un error inesperado. No se borró ningún dato. Revisá mypines.log para más detalles."
+    QMessageBox.critical(parent, title, user_msg)
 
 
 def confirm(parent, title, text):

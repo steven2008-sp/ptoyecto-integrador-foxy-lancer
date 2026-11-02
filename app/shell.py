@@ -26,7 +26,12 @@ CLIENT_NAV = [("jobs", "Buscar trabajo"), ("requests", "Mis solicitudes"), ("pub
 ADMIN_NAV = [("dashboard", "▦  Dashboard"), ("calendar", "🗓  Calendario"), ("interviews", "☎  Entrevistas"),
              ("requests", "▤  Solicitudes"), ("jobs", "⌂  Trabajos"), ("users", "☺  Usuarios"), ("reviews", "☆  Reseñas"),
              ("reports", "⚑  Reportes recibidos"), ("exports", "⭳  Informes"), ("activity", "≡  Actividad"),
-             ("backup", "⛁  Respaldo")]
+             ("backup", "⛁  Respaldo"), ("pagos_disputados", "🚨 Pagos en disputa"),
+             ("bloqueos_usuarios", "🔒 Usuarios bloqueados"),
+             ("compensaciones_pendientes", "💰 Compensaciones"),
+             ("reportes_usuarios", "🚨 Reportes de usuarios"),
+             ("suspensiones_activas", "🔒 Suspensiones activas"),
+             ("reportes_resenas", "☆ Reportes de reseñas")]
 NAV_ALIAS = {"detail": "jobs", "favorites": "jobs", "candidates": "publications"}
 
 
@@ -35,7 +40,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.user = user
         self.on_logout = on_logout
-        self.is_admin = user["rol"] == "admin"
+        self.is_admin = self.user["rol"] == "admin"
         self._skills = None
         self._unread = None
         self._photo = None
@@ -86,17 +91,55 @@ class MainWindow(QMainWindow):
                 "exports": lambda: pa.ExportPage(s),
                 "activity": lambda: pa.ActivityPage(s),
                 "backup": lambda: pa.BackupPage(s),
+                "pagos_disputados": lambda: pa.PagosDisputadosPage(s),
+                "bloqueos_usuarios": lambda: pa.BloqueosUsuariosPage(s),
+                "compensaciones_pendientes": lambda: pa.CompensacionesPendientesPage(s),
+                "reportes_usuarios": lambda: pa.ReportesUsuariosPage(s),
+                "suspensiones_activas": lambda: pa.SuspensionesActivasPage(s),
+                "reportes_resenas": lambda: pa.ReportesResenasPage(s),
             })
-        else:
+        elif self.user["rol"] == "contratante":
             common.update({
                 "jobs": lambda preset=None: pc.JobsPage(s, preset),
                 "detail": lambda job_id: pc.JobDetailPage(s, job_id),
                 "requests": lambda: pc.RequestsPage(s),
-                "publications": lambda: pc.PublicationsPage(s),
-                "candidates": lambda job_id: pc.CandidatesPage(s, job_id),
+                "publications": lambda: pc.MisTrabajosContratantePage(s),
+                "mis_trabajos": lambda: pc.MisTrabajosContratantePage(s),
+                "contrataciones": lambda: pc.ContratacionesPage(s),
+                "profile": lambda: pc.ProfilePage(s),
                 "interviews": lambda: pc.InterviewsPage(s),
                 "contracts": lambda: pc.ContractsPage(s),
                 "favorites": lambda: pc.FavoritesPage(s),
+                "mis_contactos": lambda: pc.MisContactosPage(s),
+            })
+        elif self.user["rol"] == "freelancer":
+            common.update({
+                "jobs": lambda preset=None: pc.JobsPage(s, preset),
+                "detail": lambda job_id: pc.JobDetailPage(s, job_id),
+                "requests": lambda: pc.RequestsPage(s),
+                "publications": lambda: pc.MisTrabajosContratantePage(s),
+                "mi_perfil_freelancer": lambda: pc.PerfilFreelancerPage(s),
+                "mis_experiencias": lambda: pc.MisExperienciasPage(s),
+                "mis_proyectos": lambda: pc.MisProyectosPage(s),
+                "profile": lambda: pc.ProfilePage(s),
+                "interviews": lambda: pc.InterviewsPage(s),
+                "contracts": lambda: pc.ContractsPage(s),
+                "favorites": lambda: pc.FavoritesPage(s),
+                "mis_contactos": lambda: pc.MisContactosPage(s),
+            })
+        else:  # admin
+            common.update({
+                "dashboard": lambda: pa.DashboardPage(s),
+                "calendar": lambda: pc.InterviewsPage(s),
+                "interviews": lambda: pa.RequestsAdminPage(s, "citas"),
+                "requests": lambda: pa.RequestsAdminPage(s, "solicitudes"),
+                "jobs": lambda term="": pa.AdminJobsPage(s, term),
+                "users": lambda: pa.UsersPage(s),
+                "reviews": lambda: pa.ReviewsAdminPage(s),
+                "reports": lambda: pa.ReportsPage(s),
+                "exports": lambda: pa.ExportPage(s),
+                "activity": lambda: pa.ActivityPage(s),
+                "backup": lambda: pa.BackupPage(s),
             })
         return common
 

@@ -11,7 +11,7 @@ DB_CONFIG = {
     "host": os.getenv("MYSQL_HOST", "127.0.0.1"),
     "port": int(os.getenv("MYSQL_PORT", "3306")),
     "user": os.getenv("MYSQL_USER", "root"),
-    "password": os.getenv("MYSQL_PASSWORD", ""),
+    "password": os.getenv("MYSQL_PASSWORD", "perez.2008"),
     "database": os.getenv("MYSQL_DATABASE", "mypines_db"),
     "connection_timeout": 5,
 }
@@ -44,6 +44,31 @@ def run_query(query, params=(), fetch=False, one=False):
         raise
     finally:
         connection.close()
+
+
+def _escape_identifier(ident: str) -> str:
+    """Escapa un identificador de MySQL (tabla/columna) para evitar inyección."""
+    if not ident or not ident.replace("_", "").isalnum():
+        raise ValueError(f"Identificador no válido: {ident}")
+    return "`" + ident.replace("`", "``") + "`"
+
+
+def _validar_ddl_seguro(ddl: str) -> str:
+    """Valida que una definición de columna/índice no contenga formateo % antiguo ni caracteres SQL peligrosos."""
+    if not ddl or not isinstance(ddl, str):
+        raise ValueError("Definición de columna vacía o no válida.")
+    if "%" in ddl:
+        raise ValueError(
+            "CODIGO ANTIGUO DETECTADO: el DDL contiene '%'. "
+            "Borra todos los archivos __pycache__ y .pyc y ejecuta con 'python -B'."
+        )
+    # Caracteres realmente peligrosos en contexto de DDL de columna/índice
+    peligrosos = [";", "--", "/*", "*/", "@@", "DROP ", "DELETE ", "INSERT ", "UPDATE ", "UNION ", "SELECT "]
+    ddl_upper = ddl.upper()
+    for p in peligrosos:
+        if p in ddl_upper:
+            raise ValueError(f"Definición de columna contiene contenido no permitido: {p}")
+    return ddl
 
 
 def ensure_schema():
@@ -86,7 +111,6 @@ def ensure_schema():
         cursor = connection.cursor()
         for statement in statements:
             cursor.execute(statement)
-        # Ampliación compatible de categorías: conserva los trabajos existentes.
         cursor.execute("SHOW COLUMNS FROM trabajos LIKE 'categoria'")
         category_column = cursor.fetchone()
         category_type = str(category_column[1]) if category_column else ""
@@ -106,21 +130,11 @@ def ensure_schema():
 
 # --------------------------------------------------------------------------
 # Migración v2 (aditiva): nuevas tablas y columnas para MyPines 2.
-# Nunca borra ni modifica datos existentes.
 # --------------------------------------------------------------------------
-def _column_exists(cursor, table, column):
-    cursor.execute("SHOW COLUMNS FROM `%s` LIKE %%s" % table, (column,))
-    return len(cursor.fetchall()) > 0
-
-
-def _index_exists(cursor, table, name):
-    cursor.execute("SHOW INDEX FROM `%s` WHERE Key_name=%%s" % table, (name,))
-    return len(cursor.fetchall()) > 0
-
-
 V2_COLUMNS = [
     ("trabajos", "urgente", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("trabajos", "ubicacion", "VARCHAR(120) NOT NULL DEFAULT ''"),
+    ("trabajos", "fecha_limite", "DATE NULL"),
     ("usuarios", "tema", "VARCHAR(10) NOT NULL DEFAULT 'claro'"),
     ("usuarios", "onboarding_visto", "TINYINT(1) NOT NULL DEFAULT 0"),
     ("perfiles", "foto", "VARCHAR(255) NULL"),
@@ -195,19 +209,39 @@ REQUEST_STATES = ("Pendiente", "Revisada", "Aceptada", "Rechazada", "Entrevista"
                   "En progreso", "Completada", "Cancelada", "Retirada")
 
 
+def _column_exists(cursor, table, column):
+    safe_table = _escape_identifier(table)
+    cursor.execute(f"SHOW COLUMNS FROM {safe_table} LIKE %s", (column,))
+    return len(cursor.fetchall()) > 0
+
+
+def _index_exists(cursor, table, name):
+    safe_table = _escape_identifier(table)
+    cursor.execute(f"SHOW INDEX FROM {safe_table} WHERE Key_name=%s", (name,))
+    return len(cursor.fetchall()) > 0
+
+
 def _migrate_v2(cursor):
     for table, column, ddl in V2_COLUMNS:
         if not _column_exists(cursor, table, column):
-            cursor.execute("ALTER TABLE `%s` ADD COLUMN `%s` %s" % (table, column, ddl))
+            safe_table = _escape_identifier(table)
+            safe_column = _escape_identifier(column)
+            safe_ddl = _validar_ddl_seguro(ddl)
+            sql = f"ALTER TABLE {safe_table} ADD COLUMN {safe_column} {safe_ddl}"
+            cursor.execute(sql)
     for statement in V2_TABLES:
         cursor.execute(statement)
     for table, name, cols in V2_INDEXES:
         if not _index_exists(cursor, table, name):
-            cursor.execute("CREATE INDEX `%s` ON `%s` %s" % (name, table, cols))
-    # Estados extra de solicitudes, conservando los cuatro originales.
+            safe_name = _escape_identifier(name)
+            safe_table = _escape_identifier(table)
+            safe_cols = _validar_ddl_seguro(cols)
+            sql = f"CREATE INDEX {safe_name} ON {safe_table} {safe_cols}"
+            cursor.execute(sql)
     cursor.execute("SHOW COLUMNS FROM solicitudes LIKE 'estado'")
     rows = cursor.fetchall()
     col = rows[0] if rows else None
     if col and "Contratada" not in str(col[1]):
-        states = ",".join("'%s'" % s for s in REQUEST_STATES)
-        cursor.execute("ALTER TABLE solicitudes MODIFY estado ENUM(%s) NOT NULL DEFAULT 'Pendiente'" % states)
+        states = ",".join("'" + s + "'" for s in REQUEST_STATES)
+        sql = f"ALTER TABLE solicitudes MODIFY estado ENUM({states}) NOT NULL DEFAULT 'Pendiente'"
+        cursor.execute(sql)

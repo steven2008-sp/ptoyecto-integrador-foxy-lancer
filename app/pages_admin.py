@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from . import services, logic, exports
 from . import theme as th
+from . import async_service
 from .charts import LineChart, HBarChart, DonutChart
 from .dialogs import DetailDialog, UserActivityDialog
 from .errors import handle
@@ -459,7 +460,7 @@ class UsersPage(QWidget):
         for u in self.rows:
             me = u["id"] == self.admin["id"]
             toggle = small_btn("Desactivar" if u["activo"] else "Activar", "secondary", lambda uu=u: self.toggle_active(uu))
-            role = small_btn("Hacer cliente" if u["rol"] == "admin" else "Hacer admin", "secondary", lambda uu=u: self.toggle_role(uu))
+            role = small_btn("Hacer contratante" if u["rol"] == "admin" else "Hacer admin", "secondary", lambda uu=u: self.toggle_role(uu))
             if me:
                 toggle.setEnabled(False)
                 role.setEnabled(False)
@@ -483,7 +484,7 @@ class UsersPage(QWidget):
         self.render()
 
     def toggle_role(self, u):
-        new = "cliente" if u["rol"] == "admin" else "admin"
+        new = "contratante" if u["rol"] == "admin" else "admin"
         if QMessageBox.question(self.shell, "Confirmar", f"¿Cambiar el rol de {u['nombre']} a «{new}»?") != QMessageBox.StandardButton.Yes:
             return
         try:
@@ -807,3 +808,384 @@ class BackupPage(QWidget):
     def open_folder(self):
         os.makedirs(services.BACKUPS_DIR, exist_ok=True)
         QDesktopServices.openUrl(QUrl.fromLocalFile(services.BACKUPS_DIR))
+
+
+# ======================================================================
+# Páginas de administración para sistema de pagos (Foxy Lancer 3.1)
+# ======================================================================
+class PagosDisputadosPage(QWidget):
+    """Lista pagos en disputa para revisión de administración."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.admin = shell, shell.user
+        root, v = padded_page(shell, "Pagos en disputa", "Revisá pagos donde se reportó que no se recibió el dinero.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            pagos = services.listar_pagos_disputados()
+        except Exception as exc:
+            pagos = []
+            handle(self.shell, "No se pudieron cargar los pagos en disputa", exc)
+        if not pagos:
+            self.holder.addWidget(EmptyState("🚨", "No hay pagos en disputa", "Todos los pagos están resueltos."))
+            return
+        for p in pagos:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(f"Contrato #{p['contrato_id']}", "h3", wrap=True), 1)
+            head.addWidget(state_badge(p["estado"]))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Trabajo: {p['trabajo_titulo']}", "muted"))
+            card.lay.addWidget(lbl(f"Monto: {logic.money(p['monto'])}", "accent"))
+            card.lay.addWidget(lbl(f"Reportado por: {p['reportado_por_nombre']}", "muted"))
+            card.lay.addWidget(lbl(f"Motivo: {p['motivo_disputa']}", "muted", wrap=True))
+            card.lay.addWidget(lbl(f"Fecha del reporte: {logic.fmt_dt(p['fecha_reporte'])}", "muted"))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            row.addWidget(btn("Aprobar compensación", None, lambda pid=p["id"], mid=p["monto"], uid=p["reportado_por_id" if "reportado_por_id" in p else p.get("reportado_por")]: self.aprobar_compensacion(pid, mid, uid)), 0)
+            row.addWidget(btn("Rechazar disputa", "secondary", lambda pid=p["id"]: self.rechazar_disputa(pid)), 0)
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def aprobar_compensacion(self, pago_id, monto, usuario_afectado_id):
+        d = QMessageBox.question(self, "Aprobar compensación",
+                                 f"¿Aprobar una compensación de {logic.money(monto)} para el usuario afectado del pago #{pago_id}?",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if d == QMessageBox.StandardButton.Yes:
+            try:
+                services.crear_compensacion(pago_id, usuario_afectado_id, monto,
+                                            "Compensación por pago no recibido aprobado por administración",
+                                            self.admin["id"])
+                QMessageBox.information(self, "Compensación aprobada",
+                                        "Se ha aprobado una compensación al usuario afectado.")
+                self.render()
+            except Exception as exc:
+                handle(self.shell, "No se pudo aprobar la compensación", exc)
+
+    def rechazar_disputa(self, pago_id):
+        d = QMessageBox.question(self, "Rechazar disputa",
+                                 f"¿Rechazar la disputa del pago #{pago_id}? El pago se mantendrá como está.",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if d == QMessageBox.StandardButton.Yes:
+            try:
+                execute = __import__('app.services', fromlist=['execute']).execute
+                execute("UPDATE pagos SET estado='Completado' WHERE id=%s", (pago_id,))
+                QMessageBox.information(self, "Disputa resuelta",
+                                        "La disputa ha sido rechazada y el pago se marca como completado.")
+                self.render()
+            except Exception as exc:
+                handle(self.shell, "No se pudo rechazar la disputa", exc)
+
+
+class BloqueosUsuariosPage(QWidget):
+    """Lista usuarios bloqueados para administración."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.admin = shell, shell.user
+        root, v = padded_page(shell, "Usuarios bloqueados", "Gestioná usuarios bloqueados de la plataforma.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            bloqueos = services.listar_bloqueos_usuarios()
+        except Exception as exc:
+            bloqueos = []
+            handle(self.shell, "No se pudieron cargar los bloqueos", exc)
+        if not bloqueos:
+            self.holder.addWidget(EmptyState("🔓", "No hay usuarios bloqueados", "Todos los usuarios están activos."))
+            return
+        for b in bloqueos:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(b["nombre_bloqueado"], "h3", wrap=True), 1)
+            head.addWidget(badge("Bloqueado", "danger"))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Motivo: {b['motivo']}", "muted", wrap=True))
+            card.lay.addWidget(lbl(f"Bloqueado por: {b['nombre_bloqueador']}", "muted"))
+            card.lay.addWidget(lbl(f"Fecha: {logic.fmt_dt(b['fecha_bloqueo'])}", "muted"))
+            if b["fecha_expiracion"]:
+                card.lay.addWidget(lbl(f"Expira: {logic.fmt_dt(b['fecha_expiracion'])}", "muted"))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            row.addWidget(btn("Desbloquear usuario", "secondary", lambda uid=b["usuario_bloqueado_id"]: self.desbloquear(uid)), 0)
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def desbloquear(self, usuario_id):
+        d = QMessageBox.question(self, "Desbloquear usuario",
+                                 f"¿Desbloquear al usuario #{usuario_id}?",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if d == QMessageBox.StandardButton.Yes:
+            try:
+                services.desbloquear_usuario(usuario_id, self.admin["id"])
+                QMessageBox.information(self, "Usuario desbloqueado", "El usuario ha sido desbloqueado.")
+                self.render()
+            except Exception as exc:
+                handle(self.shell, "No se pudo desbloquear el usuario", exc)
+
+
+class CompensacionesPendientesPage(QWidget):
+    """Lista compensaciones pendientes para aprobación de administración."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.admin = shell, shell.user
+        root, v = padded_page(shell, "Compensaciones pendientes", "Revisá y aprobá compensaciones por pagos no recibidos.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            comps = services.listar_compensaciones_pendientes()
+        except Exception as exc:
+            comps = []
+            handle(self.shell, "No se pudieron cargar las compensaciones", exc)
+        if not comps:
+            self.holder.addWidget(EmptyState("💰", "No hay compensaciones pendientes", "Todas las compensaciones están resueltas."))
+            return
+        for c in comps:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(f"Compensación #{c['id']}", "h3", wrap=True), 1)
+            head.addWidget(state_badge(c["estado"]))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Usuario afectado: {c['usuario_afectado_nombre']}", "muted"))
+            card.lay.addWidget(lbl(f"Trabajo: {c['trabajo_titulo']}", "muted"))
+            card.lay.addWidget(lbl(f"Monto: {logic.money(c['monto'])}", "accent"))
+            card.lay.addWidget(lbl(f"Motivo: {c['motivo']}", "muted", wrap=True))
+            card.lay.addWidget(lbl(f"Fecha: {logic.fmt_dt(c['fecha_creacion'])}", "muted"))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            row.addWidget(btn("Aprobar", None, lambda cid=c["id"]: self.aprobar(cid)), 0)
+            row.addWidget(btn("Rechazar", "secondary", lambda cid=c["id"]: self.rechazar(cid)), 0)
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def aprobar(self, compensacion_id):
+        d = QMessageBox.question(self, "Aprobar compensación",
+                                 "¿Aprobar esta compensación?",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if d == QMessageBox.StandardButton.Yes:
+            try:
+                services.aprobar_compensacion(compensacion_id, self.admin["id"])
+                QMessageBox.information(self, "Compensación aprobada", "La compensación ha sido aprobada.")
+                self.render()
+            except Exception as exc:
+                handle(self.shell, "No se pudo aprobar la compensación", exc)
+
+    def rechazar(self, compensacion_id):
+        d = QMessageBox.question(self, "Rechazar compensación",
+                                 "¿Rechazar esta compensación?",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if d == QMessageBox.StandardButton.Yes:
+            try:
+                services.rechazar_compensacion(compensacion_id, self.admin["id"])
+                QMessageBox.information(self, "Compensación rechazada", "La compensación ha sido rechazada.")
+                self.render()
+            except Exception as exc:
+                handle(self.shell, "No se pudo rechazar la compensación", exc)
+
+
+# ======================================================================
+# Página: Reportes de usuarios (Foxy Lancer 3.2)
+# ======================================================================
+class ReportesUsuariosPage(QWidget):
+    """Lista reportes de usuarios por conducta inapropiada para revisión de administración."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.admin = shell, shell.user
+        root, v = padded_page(shell, "Reportes de usuarios", "Revisá reportes por publicidad engañosa, no entrega, reseñas falsas, estafa, etc.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            reportes = services.listar_reportes_usuarios()
+        except Exception as exc:
+            reportes = []
+            handle(self.shell, "No se pudieron cargar los reportes de usuarios", exc)
+        if not reportes:
+            self.holder.addWidget(EmptyState("🚨", "No hay reportes de usuarios pendientes", "Todos los reportes están resueltos."))
+            return
+        for r in reportes:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(f"Reporte #{r['id']}", "h3", wrap=True), 1)
+            head.addWidget(state_badge(r["estado"]))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Reportado: {r['nombre_reportado']}", "muted"))
+            card.lay.addWidget(lbl(f"Reportado por: {r['nombre_reportado_por']}", "muted"))
+            card.lay.addWidget(lbl(f"Tipo: {r['tipo_reporte'].replace('_', ' ').title()}", "accent"))
+            card.lay.addWidget(lbl(f"Motivo: {r['motivo']}", "muted", wrap=True))
+            card.lay.addWidget(lbl(f"Fecha: {logic.fmt_dt(r['fecha_reporte'])}", "muted"))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            row.addWidget(btn("Advertir", None, lambda rid=r["id"]: self.resolver_reporte(rid, "Advertencia")), 0)
+            row.addWidget(btn("Suspender temporal (7 días)", "secondary", lambda rid=r["id"]: self.resolver_reporte(rid, "Suspensión temporal")), 0)
+            row.addWidget(btn("Suspender permanentemente", "danger", lambda rid=r["id"]: self.resolver_reporte(rid, "Suspensión permanente")), 0)
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def resolver_reporte(self, reporte_id, accion):
+        motivo, ok = QInputDialog.getText(self, "Motivo de la resolución", "Explicá por qué tomas esta acción:")
+        if not ok or not motivo.strip():
+            return
+        try:
+            services.resolver_reporte_usuario(reporte_id, self.admin["id"], accion, motivo.strip())
+            QMessageBox.information(self, "Reporte resuelto", f"El reporte ha sido resuelto con acción: {accion}.")
+            self.render()
+        except Exception as exc:
+            handle(self.shell, "No se pudo resolver el reporte", exc)
+
+
+# ======================================================================
+# Página: Suspensiones activas (Foxy Lancer 3.2)
+# ======================================================================
+class SuspensionesActivasPage(QWidget):
+    """Lista usuarios suspendidos actualmente."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.admin = shell, shell.user
+        root, v = padded_page(shell, "Suspensiones activas", "Gestioná usuarios suspendidos temporal o permanentemente.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            suspensiones = services.listar_suspensiones_activas()
+        except Exception as exc:
+            suspensiones = []
+            handle(self.shell, "No se pudieron cargar las suspensiones", exc)
+        if not suspensiones:
+            self.holder.addWidget(EmptyState("🔓", "No hay usuarios suspendidos", "Todos los usuarios están activos."))
+            return
+        for s in suspensiones:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(s["nombre_usuario"], "h3", wrap=True), 1)
+            tipo_badge = badge("Permanente", "danger") if s["tipo_suspension"] == "permanente" else badge("Temporal", "warn")
+            head.addWidget(tipo_badge)
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Motivo: {s['motivo']}", "muted", wrap=True))
+            card.lay.addWidget(lbl(f"Suspendido por: {s['nombre_suspendido_por']}", "muted"))
+            card.lay.addWidget(lbl(f"Fecha: {logic.fmt_dt(s['fecha_suspension'])}", "muted"))
+            if s["fecha_expiracion"]:
+                card.lay.addWidget(lbl(f"Expira: {logic.fmt_dt(s['fecha_expiracion'])}", "muted"))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            if s["tipo_suspension"] == "temporal":
+                row.addWidget(btn("Reactivar usuario", "secondary", lambda uid=s["usuario_id"]: self.reactivar(uid)), 0)
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def reactivar(self, usuario_id):
+        d = QMessageBox.question(self, "Reactivar usuario",
+                                 f"¿Reactiva al usuario #{usuario_id}?",
+                                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if d == QMessageBox.StandardButton.Yes:
+            try:
+                services.reactivar_usuario(usuario_id, self.admin["id"])
+                QMessageBox.information(self, "Usuario reactivado", "El usuario ha sido reactivado.")
+                self.render()
+            except Exception as exc:
+                handle(self.shell, "No se pudo reactivar el usuario", exc)
+
+
+# ======================================================================
+# Página: Reportes de reseñas (Foxy Lancer 3.2)
+# ======================================================================
+class ReportesResenasPage(QWidget):
+    """Lista reportes de reseñas falsas para revisión de administración."""
+    def __init__(self, shell):
+        super().__init__()
+        self.shell, self.admin = shell, shell.user
+        root, v = padded_page(shell, "Reportes de reseñas", "Revisá reportes de reseñas falsas o manipuladas.")
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.addWidget(root)
+        self.holder = QVBoxLayout()
+        v.addLayout(self.holder)
+        v.addStretch(1)
+        self.render()
+
+    def render(self):
+        clear_layout(self.holder)
+        try:
+            reportes = services.listar_reportes_resenas()
+        except Exception as exc:
+            reportes = []
+            handle(self.shell, "No se pudieron cargar los reportes de reseñas", exc)
+        if not reportes:
+            self.holder.addWidget(EmptyState("☆", "No hay reportes de reseñas pendientes", "Todos los reportes de reseñas están resueltos."))
+            return
+        for r in reportes:
+            card = Card(pad=(20, 16, 20, 16), spacing=8)
+            head = QHBoxLayout()
+            head.setSpacing(10)
+            head.addWidget(lbl(f"Reseña #{r['resena_id']}", "h3", wrap=True), 1)
+            head.addWidget(state_badge(r["estado"]))
+            card.lay.addLayout(head)
+            card.lay.addWidget(lbl(f"Reportado por: {r['nombre_reportado_por']}", "muted"))
+            card.lay.addWidget(lbl(f"Trabajador: {r['trabajador_id']} | Autor: {r['autor_id']}", "muted"))
+            card.lay.addWidget(lbl(f"Puntuación: {r['puntuacion']}/5", "muted"))
+            card.lay.addWidget(lbl(f"Comentario: {logic.truncate(r['comentario'], 100)}", "muted", wrap=True))
+            card.lay.addWidget(lbl(f"Motivo del reporte: {r['motivo']}", "muted", wrap=True))
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addStretch(1)
+            row.addWidget(btn("Eliminar reseña", "danger", lambda rid=r["id"]: self.resolver_reporte(rid, "Eliminar reseña")), 0)
+            row.addWidget(btn("Advertir autor", None, lambda rid=r["id"]: self.resolver_reporte(rid, "Advertencia al autor")), 0)
+            row.addWidget(btn("Suspender autor (7 días)", "secondary", lambda rid=r["id"]: self.resolver_reporte(rid, "Suspensión temporal autor")), 0)
+            row.addWidget(btn("Suspender autor permanentemente", "danger", lambda rid=r["id"]: self.resolver_reporte(rid, "Suspensión permanente autor")), 0)
+            card.lay.addLayout(row)
+            self.holder.addWidget(card)
+
+    def resolver_reporte(self, reporte_id, accion):
+        try:
+            services.resolver_reporte_resena(reporte_id, self.admin["id"], accion)
+            QMessageBox.information(self, "Reporte resuelto", f"El reporte de reseña ha sido resuelto con acción: {accion}.")
+            self.render()
+        except Exception as exc:
+            handle(self.shell, "No se pudo resolver el reporte de reseña", exc)
