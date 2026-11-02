@@ -31,7 +31,7 @@ def init_orm(database_url: Optional[str] = None):
 
     url = database_url or os.getenv(
         "DATABASE_URL",
-        "mysql+pymysql://root:perez.2008@127.0.0.1:3306/mypines_db?charset=utf8mb4",
+        "mysql+pymysql://root:@127.0.0.1:3306/mypines_db?charset=utf8mb4",
     )
     _engine = create_engine(url, pool_pre_ping=True, pool_recycle=3600, pool_size=10, max_overflow=20)
     _SessionLocal = sessionmaker(bind=_engine, autoflush=False, autocommit=False)
